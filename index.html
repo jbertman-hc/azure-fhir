@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EHR System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        .sidebar {
+            height: 100vh;
+            background-color: #f8f9fa;
+            position: sticky;
+            top: 0;
+        }
+        .patient-card {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .patient-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .dashboard-card {
+            transition: all 0.2s ease;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- React and other libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <!-- App Code -->
+    <script type="text/babel">
+        // Configure axios with base URL (now using our proxy server)
+        const API_BASE_URL = '/api'; // This will be proxied by our Express server
+        
+        // Create API client instance
+        const api = axios.create({
+            baseURL: API_BASE_URL,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            // Set a more reasonable timeout
+            timeout: 10000
+        });
+        
+        // Debug function to test direct connection to various endpoints
+        const testBackendConnection = async () => {
+            try {
+                const response = await fetch('/test-available-endpoints');
+                const data = await response.json();
+                console.log('Backend connection test results:', data);
+                
+                // Display results in a more user-friendly way
+                console.table(
+                    Object.entries(data.results).map(([endpoint, result]) => ({
+                        Endpoint: endpoint,
+                        Status: result.status,
+                        Success: result.success ? '✅' : '❌',
+                        Details: result.error || (result.dataAvailable ? 'Data available' : 'No data')
+                    }))
+                );
+                
+                return data;
+            } catch (err) {
+                console.error('Error testing endpoints:', err);
+                return null;
+            }
+        };
+        
+        // Run the test on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            testBackendConnection();
+        });
+
+        // Utility function for formatting dates
+        const formatDate = (dateString) => {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString();
+        };
+
+        // Context for global state management
+        const AppContext = React.createContext();
+
+        const AppProvider = ({ children }) => {
+            const [patients, setPatients] = React.useState([]);
+            const [selectedPatient, setSelectedPatient] = React.useState(null);
+            const [loading, setLoading] = React.useState(false);
+            const [error, setError] = React.useState(null);
+            const [view, setView] = React.useState('dashboard'); // dashboard, patients, patient-detail, etc.
+            const [activeModule, setActiveModule] = React.useState('summary'); // summary, allergies, medications, etc.
+            const [dataSource, setDataSource] = React.useState('loading'); // 'api' or 'mock'
+
+            // Fetch patients
+            const fetchPatients = async () => {
+                setLoading(true);
+                try {
+                    // This is a sample approach - may need to adjust based on actual API
+                    console.log('Attempting to fetch patients from API...');
+                    const response = await api.get('/Demographics');
+                    console.log('API response:', response);
+                    setPatients(response.data);
+                    setDataSource('api');
+                    setError(null);
+                } catch (err) {
+                    console.error('Error fetching patients:', err);
+                    setError(`Failed to load patients from API: ${err.message}`);
+                    // Log more detailed error information for debugging
+                    if (err.response) {
+                        console.error('Response data:', err.response.data);
+                        console.error('Response status:', err.response.status);
+                        console.error('Response headers:', err.response.headers);
+                    } else if (err.request) {
+                        console.error('Request made but no response received:', err.request);
+                    }
+                    
+                    // For demo purposes, create sample patients if API fails
+                    console.log('Falling back to mock data');
+                    setDataSource('mock');
+                    setPatients([
+                        { PatientID: 1, First: 'John', Last: 'Doe', BirthDate: '1980-05-15', Gender: 'M', ChartID: 'PT001' },
+                        { PatientID: 2, First: 'Jane', Last: 'Smith', BirthDate: '1975-10-20', Gender: 'F', ChartID: 'PT002' },
+                        { PatientID: 3, First: 'Robert', Last: 'Johnson', BirthDate: '1990-03-08', Gender: 'M', ChartID: 'PT003' },
+                        { PatientID: 4, First: 'Emily', Last: 'Williams', BirthDate: '1982-12-30', Gender: 'F', ChartID: 'PT004' },
+                        { PatientID: 5, First: 'Michael', Last: 'Brown', BirthDate: '1968-07-22', Gender: 'M', ChartID: 'PT005' },
+                        { PatientID: 6, First: 'Sarah', Last: 'Miller', BirthDate: '1995-01-17', Gender: 'F', ChartID: 'PT006' },
+                        { PatientID: 7, First: 'David', Last: 'Anderson', BirthDate: '1972-09-05', Gender: 'M', ChartID: 'PT007' },
+                        { PatientID: 8, First: 'Jessica', Last: 'Wilson', BirthDate: '1988-11-12', Gender: 'F', ChartID: 'PT008' },
+                        { PatientID: 9, First: 'James', Last: 'Taylor', BirthDate: '1978-04-25', Gender: 'M', ChartID: 'PT009' },
+                        { PatientID: 10, First: 'Lisa', Last: 'Thomas', BirthDate: '1992-08-03', Gender: 'F', ChartID: 'PT010' },
+                        { PatientID: 11, First: 'Christopher', Last: 'Jackson', BirthDate: '1965-06-19', Gender: 'M', ChartID: 'PT011' },
+                        { PatientID: 12, First: 'Amanda', Last: 'White', BirthDate: '1983-02-28', Gender: 'F', ChartID: 'PT012' },
+                        { PatientID: 13, First: 'Daniel', Last: 'Harris', BirthDate: '1970-12-15', Gender: 'M', ChartID: 'PT013' }
+                    ]);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Fetch a specific patient's details
+            const fetchPatientDetails = async (patientId) => {
+                setLoading(true);
+                try {
+                    console.log(`Attempting to fetch details for patient ${patientId}...`);
+                    const response = await api.get(`/Demographics/${patientId}`);
+                    console.log('Patient details response:', response);
+                    setSelectedPatient(response.data);
+                    setDataSource('api');
+                    setError(null);
+                } catch (err) {
+                    console.error('Error fetching patient details:', err);
+                    setError(`Failed to load patient details: ${err.message}`);
+                    
+                    // Log detailed error for debugging
+                    if (err.response) {
+                        console.error('Response data:', err.response.data);
+                        console.error('Response status:', err.response.status);
+                    }
+                    
+                    // If the API fails, use the patient from the list
+                    console.log('Falling back to patient from local list');
+                    const patient = patients.find(p => p.PatientID === patientId);
+                    setSelectedPatient(patient || null);
+                    setDataSource('mock');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Fetch patient allergies
+            const fetchPatientAllergies = async (patientId) => {
+                try {
+                    const response = await api.get(`/ListAllergies/Patient/${patientId}`);
+                    return response.data;
+                } catch (err) {
+                    console.error('Error fetching allergies:', err);
+                    // Return demo data if API fails
+                    return [
+                        { AllergyID: 1, AllergyName: 'Penicillin', Severity: 'Severe', ReactionDescription: 'Hives, difficulty breathing' },
+                        { AllergyID: 2, AllergyName: 'Peanuts', Severity: 'Moderate', ReactionDescription: 'Swelling, itching' }
+                    ];
+                }
+            };
+
+            // Fetch patient medications
+            const fetchPatientMedications = async (patientId) => {
+                try {
+                    const response = await api.get(`/ListMEDS/Patient/${patientId}`);
+                    return response.data;
+                } catch (err) {
+                    console.error('Error fetching medications:', err);
+                    // Return demo data if API fails
+                    return [
+                        { MedicationID: 1, MedicationName: 'Lisinopril', Dosage: '10mg', Frequency: 'Once daily', StartDate: '2023-01-15' },
+                        { MedicationID: 2, MedicationName: 'Atorvastatin', Dosage: '20mg', Frequency: 'Once daily at bedtime', StartDate: '2022-11-30' },
+                        { MedicationID: 3, MedicationName: 'Metformin', Dosage: '500mg', Frequency: 'Twice daily with meals', StartDate: '2023-03-10' }
+                    ];
+                }
+            };
+
+            // Fetch patient problems
+            const fetchPatientProblems = async (patientId) => {
+                try {
+                    const response = await api.get(`/ListProblem/Patient/${patientId}`);
+                    return response.data;
+                } catch (err) {
+                    console.error('Error fetching problems:', err);
+                    // Return demo data if API fails
+                    return [
+                        { ProblemID: 1, Description: 'Hypertension', DateDiagnosed: '2022-05-18', Status: 'Active' },
+                        { ProblemID: 2, Description: 'Type 2 Diabetes', DateDiagnosed: '2021-11-03', Status: 'Active' },
+                        { ProblemID: 3, Description: 'Hyperlipidemia', DateDiagnosed: '2022-01-22', Status: 'Active' }
+                    ];
+                }
+            };
+
+            React.useEffect(() => {
+                fetchPatients();
+            }, []);
+
+            return (
+                <AppContext.Provider value={{
+                    patients,
+                    selectedPatient,
+                    loading,
+                    error,
+                    view,
+                    activeModule,
+                    dataSource,
+                    setView,
+                    setActiveModule,
+                    fetchPatients,
+                    fetchPatientDetails,
+                    setSelectedPatient,
+                    fetchPatientAllergies,
+                    fetchPatientMedications,
+                    fetchPatientProblems
+                }}>
+                    {children}
+                </AppContext.Provider>
+            );
+        };
+
+        // Use the context in components
+        const useAppContext = () => React.useContext(AppContext);
+
+        // Header Component
+        const Header = () => {
+            const { view, setView, selectedPatient, dataSource } = useAppContext();
+            
+            return (
+                <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
+                    <div className="container-fluid">
+                        <a className="navbar-brand" href="#" onClick={() => setView('dashboard')}>
+                            <i className="bi bi-heart-pulse me-2"></i>
+                            EHR System
+                        </a>
+                        {dataSource && (
+                            <div className="data-source-indicator me-3">
+                                <span className={`badge ${dataSource === 'api' ? 'bg-success' : dataSource === 'mock' ? 'bg-warning text-dark' : 'bg-secondary'}`}>
+                                    {dataSource === 'api' ? 'Live API Data' : 
+                                     dataSource === 'mock' ? 'Mock Data' : 
+                                     'Loading...'}
+                                </span>
+                            </div>
+                        )}
+                        <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                            <span className="navbar-toggler-icon"></span>
+                        </button>
+                        <div className="collapse navbar-collapse" id="navbarNav">
+                            <ul className="navbar-nav me-auto">
+                                <li className="nav-item">
+                                    <a className={`nav-link ${view === 'dashboard' ? 'active' : ''}`} href="#" onClick={() => setView('dashboard')}>
+                                        <i className="bi bi-speedometer2 me-1"></i> Dashboard
+                                    </a>
+                                </li>
+                                <li className="nav-item">
+                                    <a className={`nav-link ${view === 'patients' ? 'active' : ''}`} href="#" onClick={() => setView('patients')}>
+                                        <i className="bi bi-people me-1"></i> Patients
+                                    </a>
+                                </li>
+                                {selectedPatient && (
+                                    <li className="nav-item">
+                                        <a className={`nav-link ${view === 'patient-detail' ? 'active' : ''}`} href="#">
+                                            <i className="bi bi-person me-1"></i> 
+                                            {selectedPatient.First} {selectedPatient.Last}
+                                        </a>
+                                    </li>
+                                )}
+                            </ul>
+                            <form className="d-flex">
+                                <input className="form-control me-2" type="search" placeholder="Search" />
+                                <button className="btn btn-outline-light" type="submit">Search</button>
+                            </form>
+                        </div>
+                    </div>
+                </nav>
+            );
+        };
+
+        // Sidebar Component
+        const Sidebar = () => {
+            const { view, activeModule, setActiveModule } = useAppContext();
+            
+            if (view !== 'patient-detail') return null;
+            
+            return (
+                <div className="col-md-2 sidebar py-3">
+                    <div className="d-flex flex-column p-3">
+                        <h5>Patient Chart</h5>
+                        <div className="list-group mt-3">
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'summary' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('summary')}>
+                                <i className="bi bi-file-earmark-text me-2"></i> Summary
+                            </a>
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'demographics' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('demographics')}>
+                                <i className="bi bi-person-vcard me-2"></i> Demographics
+                            </a>
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'problems' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('problems')}>
+                                <i className="bi bi-exclamation-triangle me-2"></i> Problems
+                            </a>
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'medications' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('medications')}>
+                                <i className="bi bi-capsule me-2"></i> Medications
+                            </a>
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'allergies' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('allergies')}>
+                                <i className="bi bi-bandaid me-2"></i> Allergies
+                            </a>
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'labs' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('labs')}>
+                                <i className="bi bi-flask me-2"></i> Labs
+                            </a>
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'vitals' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('vitals')}>
+                                <i className="bi bi-activity me-2"></i> Vitals
+                            </a>
+                            <a href="#" 
+                               className={`list-group-item list-group-item-action ${activeModule === 'encounters' ? 'active' : ''}`}
+                               onClick={() => setActiveModule('encounters')}>
+                                <i className="bi bi-journal-medical me-2"></i> Encounters
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Loading Spinner Component
+        const LoadingSpinner = () => (
+            <div className="loading-spinner">
+                <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        );
+
+        // Dashboard Component
+        const Dashboard = () => {
+            const { patients, setView, loading, error, dataSource } = useAppContext();
+            
+            if (loading) return <LoadingSpinner />;
+            
+            return (
+                <div className="p-4">
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h2>Dashboard</h2>
+                        <div className="d-flex">
+                            {error && (
+                                <div className="alert alert-warning me-3 mb-0 py-2">
+                                    <i className="bi bi-exclamation-triangle me-1"></i>
+                                    {error}
+                                </div>
+                            )}
+                            <button className="btn btn-primary" onClick={() => setView('patients')}>
+                                <i className="bi bi-people me-1"></i> View All Patients
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="row g-4 mb-4">
+                        <div className="col-md-3">
+                            <div className="card dashboard-card bg-primary text-white">
+                                <div className="card-body">
+                                    <h5 className="card-title">Total Patients</h5>
+                                    <p className="card-text display-4">{patients.length}</p>
+                                    <p className="card-text"><small>Active in system</small></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-3">
+                            <div className="card dashboard-card bg-success text-white">
+                                <div className="card-body">
+                                    <h5 className="card-title">Appointments Today</h5>
+                                    <p className="card-text display-4">5</p>
+                                    <p className="card-text"><small>Scheduled for today</small></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-3">
+                            <div className="card dashboard-card bg-warning text-dark">
+                                <div className="card-body">
+                                    <h5 className="card-title">Pending Labs</h5>
+                                    <p className="card-text display-4">3</p>
+                                    <p className="card-text"><small>Awaiting results</small></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-3">
+                            <div className="card dashboard-card bg-info text-white">
+                                <div className="card-body">
+                                    <h5 className="card-title">Unread Messages</h5>
+                                    <p className="card-text display-4">7</p>
+                                    <p className="card-text"><small>Requiring attention</small></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="row">
+                        <div className="col-md-6">
+                            <div className="card mb-4">
+                                <div className="card-header d-flex justify-content-between align-items-center">
+                                    <h5 className="mb-0">Recent Patients</h5>
+                                    <button className="btn btn-sm btn-outline-primary" onClick={() => setView('patients')}>View All</button>
+                                </div>
+                                <div className="card-body">
+                                    <div className="list-group">
+                                        {patients.slice(0, 5).map(patient => (
+                                            <a href="#" key={patient.PatientID} className="list-group-item list-group-item-action">
+                                                <div className="d-flex w-100 justify-content-between">
+                                                    <h6 className="mb-1">{patient.First} {patient.Last}</h6>
+                                                    <small>Chart: {patient.ChartID}</small>
+                                                </div>
+                                                <p className="mb-1">
+                                                    DOB: {formatDate(patient.BirthDate)} | Gender: {patient.Gender}
+                                                </p>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-6">
+                            <div className="card mb-4">
+                                <div className="card-header">
+                                    <h5 className="mb-0">Today's Schedule</h5>
+                                </div>
+                                <div className="card-body">
+                                    <table className="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Time</th>
+                                                <th>Patient</th>
+                                                <th>Provider</th>
+                                                <th>Type</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>9:00 AM</td>
+                                                <td>John Doe</td>
+                                                <td>Dr. Smith</td>
+                                                <td>Check-up</td>
+                                            </tr>
+                                            <tr>
+                                                <td>10:30 AM</td>
+                                                <td>Jane Smith</td>
+                                                <td>Dr. Johnson</td>
+                                                <td>Follow-up</td>
+                                            </tr>
+                                            <tr>
+                                                <td>1:15 PM</td>
+                                                <td>Robert Johnson</td>
+                                                <td>Dr. Smith</td>
+                                                <td>Annual Physical</td>
+                                            </tr>
+                                            <tr>
+                                                <td>2:45 PM</td>
+                                                <td>Emily Williams</td>
+                                                <td>Dr. Johnson</td>
+                                                <td>Lab Review</td>
+                                            </tr>
+                                            <tr>
+                                                <td>4:00 PM</td>
+                                                <td>Michael Brown</td>
+                                                <td>Dr. Smith</td>
+                                                <td>Follow-up</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Patient List Component
+        const PatientList = () => {
+            const { patients, loading, setView, setSelectedPatient, fetchPatientDetails } = useAppContext();
+            const [searchTerm, setSearchTerm] = React.useState('');
+            
+            if (loading) return <LoadingSpinner />;
+            
+            const filteredPatients = patients.filter(patient => {
+                const fullName = `${patient.First} ${patient.Last}`.toLowerCase();
+                const chartId = patient.ChartID ? patient.ChartID.toLowerCase() : '';
+                const searchLower = searchTerm.toLowerCase();
+                
+                return fullName.includes(searchLower) || chartId.includes(searchLower);
+            });
+            
+            const handlePatientSelect = (patient) => {
+                setSelectedPatient(patient);
+                fetchPatientDetails(patient.PatientID);
+                setView('patient-detail');
+            };
+            
+            return (
+                <div className="p-4">
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h2>Patients</h2>
+                        <div className="w-25">
+                            <input 
+                                type="text" 
+                                className="form-control" 
+                                placeholder="Search patients..." 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="row row-cols-1 row-cols-md-3 g-4">
+                        {filteredPatients.map(patient => (
+                            <div key={patient.PatientID} className="col">
+                                <div className="card patient-card h-100" onClick={() => handlePatientSelect(patient)}>
+                                    <div className="card-body">
+                                        <div className="d-flex align-items-center mb-3">
+                                            <div className="patient-avatar me-3 bg-light rounded-circle d-flex justify-content-center align-items-center" style={{width: '50px', height: '50px'}}>
+                                                <i className="bi bi-person fs-3"></i>
+                                            </div>
+                                            <div>
+                                                <h5 className="card-title mb-0">{patient.First} {patient.Last}</h5>
+                                                <p className="card-text text-muted mb-0">Chart: {patient.ChartID}</p>
+                                            </div>
+                                        </div>
+                                        <p className="card-text">
+                                            <strong>DOB:</strong> {formatDate(patient.BirthDate)}<br />
+                                            <strong>Gender:</strong> {patient.Gender === 'M' ? 'Male' : patient.Gender === 'F' ? 'Female' : patient.Gender}<br />
+                                            {patient.Phone && <><strong>Phone:</strong> {patient.Phone}</>}
+                                        </p>
+                                    </div>
+                                    <div className="card-footer bg-transparent">
+                                        <button className="btn btn-sm btn-primary w-100">View Chart</button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // Patient Detail Components
+        const PatientSummary = () => {
+            const { selectedPatient, loading } = useAppContext();
+            const [problems, setProblems] = React.useState([]);
+            const [medications, setMedications] = React.useState([]);
+            const [allergies, setAllergies] = React.useState([]);
+            const [loading2, setLoading2] = React.useState(true);
+            
+            const { fetchPatientProblems, fetchPatientMedications, fetchPatientAllergies } = useAppContext();
+            
+            React.useEffect(() => {
+                if (selectedPatient) {
+                    setLoading2(true);
+                    Promise.all([
+                        fetchPatientProblems(selectedPatient.PatientID),
+                        fetchPatientMedications(selectedPatient.PatientID),
+                        fetchPatientAllergies(selectedPatient.PatientID)
+                    ]).then(([problemsData, medsData, allergiesData]) => {
+                        setProblems(problemsData);
+                        setMedications(medsData);
+                        setAllergies(allergiesData);
+                        setLoading2(false);
+                    });
+                }
+            }, [selectedPatient]);
+            
+            if (loading || loading2 || !selectedPatient) return <LoadingSpinner />;
+            
+            // Calculate age
+            const calculateAge = (birthDate) => {
+                const today = new Date();
+                const birth = new Date(birthDate);
+                let age = today.getFullYear() - birth.getFullYear();
+                const monthDiff = today.getMonth() - birth.getMonth();
+                
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                    age--;
+                }
+                
+                return age;
+            };
+            
+            return (
+                <div className="p-4">
+                    <div className="card mb-4">
+                        <div className="card-header bg-primary text-white">
+                            <h5 className="mb-0">Patient Summary</h5>
+                        </div>
+                        <div className="card-body">
+                            <div className="row">
+                                <div className="col-md-3 text-center">
+                                    <div className="rounded-circle bg-light d-flex justify-content-center align-items-center mx-auto mb-3" style={{width: '120px', height: '120px'}}>
+                                        <i className="bi bi-person fs-1"></i>
+                                    </div>
+                                    <h4>{selectedPatient.First} {selectedPatient.Last}</h4>
+                                    <p className="text-muted">Chart ID: {selectedPatient.ChartID}</p>
+                                </div>
+                                <div className="col-md-9">
+                                    <div className="row mb-3">
+                                        <div className="col-md-4">
+                                            <p><strong>Date of Birth:</strong><br />{formatDate(selectedPatient.BirthDate)}</p>
+                                        </div>
+                                        <div className="col-md-4">
+                                            <p><strong>Age:</strong><br />{calculateAge(selectedPatient.BirthDate)} years</p>
+                                        </div>
+                                        <div className="col-md-4">
+                                            <p><strong>Gender:</strong><br />{selectedPatient.Gender === 'M' ? 'Male' : selectedPatient.Gender === 'F' ? 'Female' : selectedPatient.Gender}</p>
+                                        </div>
+                                    </div>
+                                    <div className="row">
+                                        <div className="col-md-4">
+                                            <p><strong>Phone:</strong><br />{selectedPatient.Phone || 'Not provided'}</p>
+                                        </div>
+                                        <div className="col-md-8">
+                                            <p><strong>Address:</strong><br />{selectedPatient.PatientAddress ? `${selectedPatient.PatientAddress}, ${selectedPatient.City}, ${selectedPatient.State} ${selectedPatient.Zip}` : 'Not provided'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="row">
+                        <div className="col-md-4">
+                            <div className="card mb-4">
+                                <div className="card-header d-flex justify-content-between align-items-center">
+                                    <h5 className="mb-0">Active Problems</h5>
+                                    <span className="badge bg-primary rounded-pill">{problems.length}</span>
+                                </div>
+                                <div className="card-body" style={{maxHeight: '300px', overflowY: 'auto'}}>
+                                    {problems.length > 0 ? (
+                                        <div className="list-group list-group-flush">
+                                            {problems.map(problem => (
+                                                <div key={problem.ProblemID} className="list-group-item">
+                                                    <h6 className="mb-1">{problem.Description}</h6>
+                                                    <p className="mb-1 text-muted">
+                                                        Diagnosed: {formatDate(problem.DateDiagnosed)}<br />
+                                                        Status: {problem.Status}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted">No active problems recorded</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="col-md-4">
+                            <div className="card mb-4">
+                                <div className="card-header d-flex justify-content-between align-items-center">
+                                    <h5 className="mb-0">Medications</h5>
+                                    <span className="badge bg-primary rounded-pill">{medications.length}</span>
+                                </div>
+                                <div className="card-body" style={{maxHeight: '300px', overflowY: 'auto'}}>
+                                    {medications.length > 0 ? (
+                                        <div className="list-group list-group-flush">
+                                            {medications.map(med => (
+                                                <div key={med.MedicationID} className="list-group-item">
+                                                    <h6 className="mb-1">{med.MedicationName}</h6>
+                                                    <p className="mb-1 text-muted">
+                                                        {med.Dosage}, {med.Frequency}<br />
+                                                        Started: {formatDate(med.StartDate)}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted">No active medications recorded</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="col-md-4">
+                            <div className="card mb-4">
+                                <div className="card-header d-flex justify-content-between align-items-center">
+                                    <h5 className="mb-0">Allergies</h5>
+                                    <span className="badge bg-primary rounded-pill">{allergies.length}</span>
+                                </div>
+                                <div className="card-body" style={{maxHeight: '300px', overflowY: 'auto'}}>
+                                    {allergies.length > 0 ? (
+                                        <div className="list-group list-group-flush">
+                                            {allergies.map(allergy => (
+                                                <div key={allergy.AllergyID} className="list-group-item">
+                                                    <h6 className="mb-1">{allergy.AllergyName}</h6>
+                                                    <p className="mb-1 text-muted">
+                                                        Severity: {allergy.Severity}<br />
+                                                        Reaction: {allergy.ReactionDescription}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted">No allergies recorded</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="row">
+                        <div className="col-md-6">
+                            <div className="card mb-4">
+                                <div className="card-header">
+                                    <h5 className="mb-0">Recent Encounters</h5>
+                                </div>
+                                <div className="card-body">
+                                    <table className="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Provider</th>
+                                                <th>Type</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>2023-03-15</td>
+                                                <td>Dr. Smith</td>
+                                                <td>Follow-up</td>
+                                                <td><button className="btn btn-sm btn-outline-primary">View</button></td>
+                                            </tr>
+                                            <tr>
+                                                <td>2022-12-01</td>
+                                                <td>Dr. Johnson</td>
+                                                <td>Annual Physical</td>
+                                                <td><button className="btn btn-sm btn-outline-primary">View</button></td>
+                                            </tr>
+                                            <tr>
+                                                <td>2022-09-10</td>
+                                                <td>Dr. Smith</td>
+                                                <td>Sick Visit</td>
+                                                <td><button className="btn btn-sm btn-outline-primary">View</button></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="col-md-6">
+                            <div className="card mb-4">
+                                <div className="card-header">
+                                    <h5 className="mb-0">Vital Signs Trends</h5>
+                                </div>
+                                <div className="card-body">
+                                    <table className="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>BP</th>
+                                                <th>Pulse</th>
+                                                <th>Temp</th>
+                                                <th>Weight</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>2023-03-15</td>
+                                                <td>128/82</td>
+                                                <td>72</td>
+                                                <td>98.6</td>
+                                                <td>185 lbs</td>
+                                            </tr>
+                                            <tr>
+                                                <td>2022-12-01</td>
+                                                <td>130/84</td>
+                                                <td>70</td>
+                                                <td>98.2</td>
+                                                <td>187 lbs</td>
+                                            </tr>
+                                            <tr>
+                                                <td>2022-09-10</td>
+                                                <td>138/88</td>
+                                                <td>75</td>
+                                                <td>99.1</td>
+                                                <td>190 lbs</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const PatientDemographics = () => {
+            const { selectedPatient, loading } = useAppContext();
+            
+            if (loading || !selectedPatient) return <LoadingSpinner />;
+            
+            return (
+                <div className="p-4">
+                    <div className="card mb-4">
+                        <div className="card-header bg-primary text-white">
+                            <h5 className="mb-0">Demographics</h5>
+                        </div>
+                        <div className="card-body">
+                            <form>
+                                <div className="row mb-3">
+                                    <div className="col-md-2">
+                                        <label className="form-label">Salutation</label>
+                                        <input type="text" className="form-control" value={selectedPatient.Salutation || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-3">
+                                        <label className="form-label">First Name</label>
+                                        <input type="text" className="form-control" value={selectedPatient.First || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-2">
+                                        <label className="form-label">Middle</label>
+                                        <input type="text" className="form-control" value={selectedPatient.Middle || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-3">
+                                        <label className="form-label">Last Name</label>
+                                        <input type="text" className="form-control" value={selectedPatient.Last || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-2">
+                                        <label className="form-label">Suffix</label>
+                                        <input type="text" className="form-control" value={selectedPatient.Suffix || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <div className="row mb-3">
+                                    <div className="col-md-3">
+                                        <label className="form-label">Date of Birth</label>
+                                        <input type="date" className="form-control" value={selectedPatient.BirthDate ? selectedPatient.BirthDate.split('T')[0] : ''} readOnly />
+                                    </div>
+                                    <div className="col-md-3">
+                                        <label className="form-label">Gender</label>
+                                        <input type="text" className="form-control" value={selectedPatient.Gender || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-3">
+                                        <label className="form-label">Marital Status</label>
+                                        <input type="text" className="form-control" value={selectedPatient.MaritalStatus || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-3">
+                                        <label className="form-label">SSN</label>
+                                        <input type="text" className="form-control" value={selectedPatient.SS || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <h6 className="mt-4 mb-3">Contact Information</h6>
+                                <div className="row mb-3">
+                                    <div className="col-md-6">
+                                        <label className="form-label">Address</label>
+                                        <input type="text" className="form-control" value={selectedPatient.PatientAddress || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-2">
+                                        <label className="form-label">City</label>
+                                        <input type="text" className="form-control" value={selectedPatient.City || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-2">
+                                        <label className="form-label">State</label>
+                                        <input type="text" className="form-control" value={selectedPatient.State || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-2">
+                                        <label className="form-label">ZIP</label>
+                                        <input type="text" className="form-control" value={selectedPatient.Zip || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <div className="row mb-3">
+                                    <div className="col-md-4">
+                                        <label className="form-label">Phone</label>
+                                        <input type="text" className="form-control" value={selectedPatient.Phone || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-4">
+                                        <label className="form-label">Work Phone</label>
+                                        <input type="text" className="form-control" value={selectedPatient.WorkPhone || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-4">
+                                        <label className="form-label">Email</label>
+                                        <input type="email" className="form-control" value={selectedPatient.Email || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <h6 className="mt-4 mb-3">Emergency Contact</h6>
+                                <div className="row mb-3">
+                                    <div className="col-md-6">
+                                        <label className="form-label">Name</label>
+                                        <input type="text" className="form-control" value={selectedPatient.EmergencyContactName || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-6">
+                                        <label className="form-label">Phone</label>
+                                        <input type="text" className="form-control" value={selectedPatient.EmergencyContactPhone || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <h6 className="mt-4 mb-3">Employment Information</h6>
+                                <div className="row mb-3">
+                                    <div className="col-md-12">
+                                        <label className="form-label">Employer</label>
+                                        <input type="text" className="form-control" value={selectedPatient.EmployerName || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <h6 className="mt-4 mb-3">Insurance Information</h6>
+                                <div className="row mb-3">
+                                    <div className="col-md-4">
+                                        <label className="form-label">Insurance Type</label>
+                                        <input type="text" className="form-control" value={selectedPatient.InsuranceType || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-4">
+                                        <label className="form-label">Plan Name</label>
+                                        <input type="text" className="form-control" value={selectedPatient.InsuredPlanName || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-4">
+                                        <label className="form-label">ID Number</label>
+                                        <input type="text" className="form-control" value={selectedPatient.InsuredIDNo || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <div className="row mb-3">
+                                    <div className="col-md-4">
+                                        <label className="form-label">Group Number</label>
+                                        <input type="text" className="form-control" value={selectedPatient.InsuredGroupNo || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-4">
+                                        <label className="form-label">Insured Name</label>
+                                        <input type="text" className="form-control" value={selectedPatient.InsuredName || ''} readOnly />
+                                    </div>
+                                    <div className="col-md-4">
+                                        <label className="form-label">Relationship</label>
+                                        <input type="text" className="form-control" value={selectedPatient.PatientRel || ''} readOnly />
+                                    </div>
+                                </div>
+                                
+                                <div className="mt-4">
+                                    <button type="button" className="btn btn-primary">Edit Information</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const PatientProblems = () => {
+            const { selectedPatient, fetchPatientProblems } = useAppContext();
+            const [problems, setProblems] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            
+            React.useEffect(() => {
+                if (selectedPatient) {
+                    setLoading(true);
+                    fetchPatientProblems(selectedPatient.PatientID).then(data => {
+                        setProblems(data);
+                        setLoading(false);
+                    });
+                }
+            }, [selectedPatient]);
+            
+            if (loading) return <LoadingSpinner />;
+            
+            return (
+                <div className="p-4">
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h3>Problem List</h3>
+                        <button className="btn btn-primary">
+                            <i className="bi bi-plus-circle me-1"></i> Add Problem
+                        </button>
+                    </div>
+                    
+                    {problems.length > 0 ? (
+                        <div className="card">
+                            <div className="card-body">
+                                <table className="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Problem</th>
+                                            <th>Date Diagnosed</th>
+                                            <th>Status</th>
+                                            <th>Notes</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {problems.map(problem => (
+                                            <tr key={problem.ProblemID}>
+                                                <td>{problem.Description}</td>
+                                                <td>{formatDate(problem.DateDiagnosed)}</td>
+                                                <td>
+                                                    <span className={`badge ${problem.Status === 'Active' ? 'bg-success' : 'bg-secondary'}`}>
+                                                        {problem.Status}
+                                                    </span>
+                                                </td>
+                                                <td>{problem.Notes || '-'}</td>
+                                                <td>
+                                                    <div className="btn-group btn-group-sm">
+                                                        <button className="btn btn-outline-primary">Edit</button>
+                                                        <button className="btn btn-outline-danger">Resolve</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="alert alert-info">
+                            No problems have been recorded for this patient.
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const PatientMedications = () => {
+            const { selectedPatient, fetchPatientMedications } = useAppContext();
+            const [medications, setMedications] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            
+            React.useEffect(() => {
+                if (selectedPatient) {
+                    setLoading(true);
+                    fetchPatientMedications(selectedPatient.PatientID).then(data => {
+                        setMedications(data);
+                        setLoading(false);
+                    });
+                }
+            }, [selectedPatient]);
+            
+            if (loading) return <LoadingSpinner />;
+            
+            return (
+                <div className="p-4">
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h3>Medications</h3>
+                        <button className="btn btn-primary">
+                            <i className="bi bi-plus-circle me-1"></i> Add Medication
+                        </button>
+                    </div>
+                    
+                    {medications.length > 0 ? (
+                        <div className="card">
+                            <div className="card-body">
+                                <table className="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Medication</th>
+                                            <th>Dosage</th>
+                                            <th>Frequency</th>
+                                            <th>Start Date</th>
+                                            <th>End Date</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {medications.map(med => (
+                                            <tr key={med.MedicationID}>
+                                                <td>{med.MedicationName}</td>
+                                                <td>{med.Dosage}</td>
+                                                <td>{med.Frequency}</td>
+                                                <td>{formatDate(med.StartDate)}</td>
+                                                <td>{formatDate(med.EndDate) || '-'}</td>
+                                                <td>
+                                                    <span className={`badge ${!med.EndDate ? 'bg-success' : 'bg-secondary'}`}>
+                                                        {!med.EndDate ? 'Active' : 'Discontinued'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div className="btn-group btn-group-sm">
+                                                        <button className="btn btn-outline-primary">Edit</button>
+                                                        {!med.EndDate && (
+                                                            <button className="btn btn-outline-danger">Discontinue</button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="alert alert-info">
+                            No medications have been recorded for this patient.
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const PatientAllergies = () => {
+            const { selectedPatient, fetchPatientAllergies } = useAppContext();
+            const [allergies, setAllergies] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            
+            React.useEffect(() => {
+                if (selectedPatient) {
+                    setLoading(true);
+                    fetchPatientAllergies(selectedPatient.PatientID).then(data => {
+                        setAllergies(data);
+                        setLoading(false);
+                    });
+                }
+            }, [selectedPatient]);
+            
+            if (loading) return <LoadingSpinner />;
+            
+            return (
+                <div className="p-4">
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h3>Allergies</h3>
+                        <button className="btn btn-primary">
+                            <i className="bi bi-plus-circle me-1"></i> Add Allergy
+                        </button>
+                    </div>
+                    
+                    {allergies.length > 0 ? (
+                        <div className="card">
+                            <div className="card-body">
+                                <table className="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Allergy</th>
+                                            <th>Severity</th>
+                                            <th>Reaction</th>
+                                            <th>Date Recorded</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {allergies.map(allergy => (
+                                            <tr key={allergy.AllergyID}>
+                                                <td>{allergy.AllergyName}</td>
+                                                <td>
+                                                    <span className={`badge ${
+                                                        allergy.Severity === 'Severe' ? 'bg-danger' : 
+                                                        allergy.Severity === 'Moderate' ? 'bg-warning text-dark' : 
+                                                        'bg-info text-dark'
+                                                    }`}>
+                                                        {allergy.Severity}
+                                                    </span>
+                                                </td>
+                                                <td>{allergy.ReactionDescription}</td>
+                                                <td>{formatDate(allergy.DateRecorded) || '-'}</td>
+                                                <td>
+                                                    <div className="btn-group btn-group-sm">
+                                                        <button className="btn btn-outline-primary">Edit</button>
+                                                        <button className="btn btn-outline-danger">Remove</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="alert alert-info">
+                            No allergies have been recorded for this patient.
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // App Component
+        const App = () => {
+            const { view, activeModule } = useAppContext();
+            
+            const renderContent = () => {
+                if (view === 'dashboard') {
+                    return <Dashboard />;
+                } else if (view === 'patients') {
+                    return <PatientList />;
+                } else if (view === 'patient-detail') {
+                    switch (activeModule) {
+                        case 'summary':
+                            return <PatientSummary />;
+                        case 'demographics':
+                            return <PatientDemographics />;
+                        case 'problems':
+                            return <PatientProblems />;
+                        case 'medications':
+                            return <PatientMedications />;
+                        case 'allergies':
+                            return <PatientAllergies />;
+                        default:
+                            return <PatientSummary />;
+                    }
+                }
+            };
+            
+            return (
+                <div>
+                    <Header />
+                    <div className="container-fluid">
+                        <div className="row">
+                            <Sidebar />
+                            <div className={view === 'patient-detail' ? 'col-md-10' : 'col-md-12'}>
+                                {renderContent()}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            <AppProvider>
+                <App />
+            </AppProvider>
+        );
+    </script>
+</body>
+</html>
