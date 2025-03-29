@@ -117,32 +117,69 @@
                     // Let's try to fetch individual patients via their Addendum info
                     console.log('Attempting to fetch patient data from available endpoints...');
                     
-                    // Use the working Addendum endpoint to get patient information
-                    // Since we know Addendum/1 works and references a patient
-                    const addendumResponse = await api.get('/Addendum/1');
-                    console.log('Addendum response:', addendumResponse);
+                    // Try to get patients from multiple known sources
+                    let patientData = null;
                     
-                    // Extract patient information from the Addendum
-                    const patData = addendumResponse.data;
-                    if (patData && patData.patID) {
-                        // We found at least one patient - create a demo set based on this info
-                        const patientName = patData.patientName || '';
-                        const nameParts = patientName.split(', ');
-                        const last = nameParts[0] || '';
-                        const first = nameParts.length > 1 ? nameParts[1].split(' ')[0] : '';
-                        
-                        // Extract DOB if present in the string
-                        const dobMatch = patientName.match(/DOB: (\d+\/\d+\/\d+)/);
-                        const birthDate = dobMatch ? new Date(dobMatch[1]) : new Date('1956-01-12');
-                        
-                        // Create patient from Addendum data
+                    // First try the William Saffire patient (ID 1001)
+                    try {
+                        const demoResponse = await api.get('/Demographics/1001');
+                        console.log('William Saffire demographics response:', demoResponse);
+                        if (demoResponse.status === 200 && demoResponse.data) {
+                            patientData = demoResponse.data;
+                        }
+                    } catch (demoErr) {
+                        console.warn('Could not fetch William Saffire demographics:', demoErr.message);
+                    }
+                    
+                    // If William Saffire didn't work, try Bobo the Clown via Addendum
+                    if (!patientData) {
+                        try {
+                            const addendumResponse = await api.get('/Addendum/1');
+                            console.log('Addendum response:', addendumResponse);
+                            
+                            // Extract patient information from the Addendum
+                            const patData = addendumResponse.data;
+                            if (patData && patData.patID) {
+                                // We found at least one patient - create a demo set based on this info
+                                const patientName = patData.patientName || '';
+                                const nameParts = patientName.split(', ');
+                                const last = nameParts[0] || '';
+                                const first = nameParts.length > 1 ? nameParts[1].split(' ')[0] : '';
+                                
+                                // Extract DOB if present in the string
+                                const dobMatch = patientName.match(/DOB: (\d+\/\d+\/\d+)/);
+                                const birthDate = dobMatch ? new Date(dobMatch[1]) : new Date('1956-01-12');
+                                
+                                // Create patient from Addendum data
+                                patientData = {
+                                    PatientID: patData.patID,
+                                    First: first,
+                                    Last: last,
+                                    BirthDate: birthDate.toISOString(),
+                                    Gender: 'U', // Unknown since not provided
+                                    ChartID: `PT${patData.patID}`,
+                                    // Add the Addendum data for context
+                                    AddendumNote: patData.noteBody,
+                                    AddendumDate: patData.date
+                                };
+                            }
+                        } catch (addErr) {
+                            console.warn('Could not fetch Addendum data:', addErr.message);
+                        }
+                    }
+                    
+                    // If we found a patient through either method
+                    if (patientData) {
+                        // Create a patient object for our system
                         const patient = {
-                            PatientID: patData.patID,
-                            First: first,
-                            Last: last,
-                            BirthDate: birthDate.toISOString(),
-                            Gender: 'U', // Unknown since not provided
-                            ChartID: `PT${patData.patID}`
+                            PatientID: patientData.PatientID || patientData.patID,
+                            First: patientData.First || patientData.first || '',
+                            Last: patientData.Last || patientData.last || '',
+                            BirthDate: patientData.BirthDate || patientData.birthDate || new Date().toISOString(),
+                            Gender: patientData.Gender || patientData.gender || 'U',
+                            ChartID: patientData.ChartID || `PT${patientData.PatientID || patientData.patID}`,
+                            // Keep any extra data we received
+                            ...patientData
                         };
                         
                         // Set the first patient and use mock data for others

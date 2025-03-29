@@ -52,10 +52,18 @@ The application includes several tools to diagnose API connectivity issues:
 1. **Test API Connection**:  
    Visit `http://localhost:3000/test-api-connection` to test the base Demographics endpoint.
 
-2. **Test Addendum Endpoint**:  
-   Visit `http://localhost:3000/test-addendum/1` to test a specific Addendum record.
+2. **Test Specific Endpoint**:  
+   Visit `http://localhost:3000/test-endpoint/Demographics/1001` to test a specific endpoint and ID (e.g., patient William Saffire).
+   - Format: `/test-endpoint/{endpoint}/{optional-id}`
+   - Examples:
+     - `/test-endpoint/Demographics/1001` - Get William Saffire's demographics
+     - `/test-endpoint/Addendum/1` - Get specific Addendum
+     - `/test-endpoint/PatientIndex` - Get all patient indices
 
-3. **Test All Available Endpoints**:  
+3. **Legacy Addendum Test**:  
+   Visit `http://localhost:3000/test-addendum/1` to test a specific Addendum record (maintained for backward compatibility).
+
+4. **Test All Available Endpoints**:  
    Visit `http://localhost:3000/test-available-endpoints` to run tests against multiple endpoints and see which ones are available.
 
 4. **Browser Console**:  

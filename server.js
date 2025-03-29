@@ -36,7 +36,35 @@ app.get('/test-api-connection', async (req, res) => {
   }
 });
 
-// Test specific endpoint - Addendum with ID 1
+// Test any endpoint with optional ID parameter
+app.get('/test-endpoint/:endpoint/:id?', async (req, res) => {
+  const endpoint = req.params.endpoint;
+  const id = req.params.id || '';
+  const path = id ? `${endpoint}/${id}` : endpoint;
+  
+  try {
+    console.log(`Testing endpoint: ${path}`);
+    const response = await axios.get(`https://apiserviceswin20250318.azurewebsites.net/api/${path}`);
+    console.log(`API Response for ${path}:`, response.status);
+    res.json({
+      success: true,
+      status: response.status,
+      data: response.data
+    });
+  } catch (error) {
+    console.error(`Error testing ${path} endpoint:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      response: error.response ? {
+        status: error.response.status,
+        data: error.response.data
+      } : null
+    });
+  }
+});
+
+// Test specific endpoint - Addendum with ID (for backward compatibility)
 app.get('/test-addendum/:id', async (req, res) => {
   const id = req.params.id;
   try {
@@ -70,10 +98,15 @@ app.get('/test-available-endpoints', async (req, res) => {
       'Addendum/1',
       'Demographics',
       'Demographics/1',
+      'Demographics/1001',  // William Saffire
+      'Demographics/1033',  // Bobo the Clown
+      'PatientIndex',
       'PatientIndex/1',
-      'ListAllergies/Patient/1',
-      'ListProblem/Patient/1',
-      'ListMEDS/Patient/1',
+      'PatientIndex/1001',
+      'ListAllergies/Patient/1001',
+      'ListProblem/Patient/1001',
+      'ListMEDS/Patient/1001',
+      'SOAP/1001',
       'ProviderIndex'
     ];
     
