@@ -63,7 +63,8 @@ The application includes several tools to diagnose API connectivity issues:
 
 The application also displays a badge in the top navigation bar indicating the current data source:
 
-- 🟢 **Live API Data** - Successfully connected to the Azure backend API
+- 🟢 **Live API Data** - Successfully connected to the Azure backend API with full data
+- 🔵 **Hybrid Data** - Connected to the API but using a mix of API data and mock data
 - 🟠 **Mock Data** - Using mock data because the API connection failed
 
 If you're experiencing connectivity issues:

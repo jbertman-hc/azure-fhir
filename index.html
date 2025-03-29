@@ -113,13 +113,49 @@
             const fetchPatients = async () => {
                 setLoading(true);
                 try {
-                    // This is a sample approach - may need to adjust based on actual API
-                    console.log('Attempting to fetch patients from API...');
-                    const response = await api.get('/Demographics');
-                    console.log('API response:', response);
-                    setPatients(response.data);
-                    setDataSource('api');
-                    setError(null);
+                    // Based on API tests, we know /Demographics returns 405 Method Not Allowed
+                    // Let's try to fetch individual patients via their Addendum info
+                    console.log('Attempting to fetch patient data from available endpoints...');
+                    
+                    // Use the working Addendum endpoint to get patient information
+                    // Since we know Addendum/1 works and references a patient
+                    const addendumResponse = await api.get('/Addendum/1');
+                    console.log('Addendum response:', addendumResponse);
+                    
+                    // Extract patient information from the Addendum
+                    const patData = addendumResponse.data;
+                    if (patData && patData.patID) {
+                        // We found at least one patient - create a demo set based on this info
+                        const patientName = patData.patientName || '';
+                        const nameParts = patientName.split(', ');
+                        const last = nameParts[0] || '';
+                        const first = nameParts.length > 1 ? nameParts[1].split(' ')[0] : '';
+                        
+                        // Extract DOB if present in the string
+                        const dobMatch = patientName.match(/DOB: (\d+\/\d+\/\d+)/);
+                        const birthDate = dobMatch ? new Date(dobMatch[1]) : new Date('1956-01-12');
+                        
+                        // Create patient from Addendum data
+                        const patient = {
+                            PatientID: patData.patID,
+                            First: first,
+                            Last: last,
+                            BirthDate: birthDate.toISOString(),
+                            Gender: 'U', // Unknown since not provided
+                            ChartID: `PT${patData.patID}`
+                        };
+                        
+                        // Set the first patient and use mock data for others
+                        const mockPatients = generateMockPatients();
+                        // Replace the first mock patient with our real patient data
+                        mockPatients[0] = patient;
+                        
+                        setPatients(mockPatients);
+                        setDataSource('hybrid'); // Part real, part mock
+                        setError(null);
+                    } else {
+                        throw new Error('No patient data found in Addendum');
+                    }
                 } catch (err) {
                     console.error('Error fetching patients:', err);
                     setError(`Failed to load patients from API: ${err.message}`);
@@ -135,24 +171,29 @@
                     // For demo purposes, create sample patients if API fails
                     console.log('Falling back to mock data');
                     setDataSource('mock');
-                    setPatients([
-                        { PatientID: 1, First: 'John', Last: 'Doe', BirthDate: '1980-05-15', Gender: 'M', ChartID: 'PT001' },
-                        { PatientID: 2, First: 'Jane', Last: 'Smith', BirthDate: '1975-10-20', Gender: 'F', ChartID: 'PT002' },
-                        { PatientID: 3, First: 'Robert', Last: 'Johnson', BirthDate: '1990-03-08', Gender: 'M', ChartID: 'PT003' },
-                        { PatientID: 4, First: 'Emily', Last: 'Williams', BirthDate: '1982-12-30', Gender: 'F', ChartID: 'PT004' },
-                        { PatientID: 5, First: 'Michael', Last: 'Brown', BirthDate: '1968-07-22', Gender: 'M', ChartID: 'PT005' },
-                        { PatientID: 6, First: 'Sarah', Last: 'Miller', BirthDate: '1995-01-17', Gender: 'F', ChartID: 'PT006' },
-                        { PatientID: 7, First: 'David', Last: 'Anderson', BirthDate: '1972-09-05', Gender: 'M', ChartID: 'PT007' },
-                        { PatientID: 8, First: 'Jessica', Last: 'Wilson', BirthDate: '1988-11-12', Gender: 'F', ChartID: 'PT008' },
-                        { PatientID: 9, First: 'James', Last: 'Taylor', BirthDate: '1978-04-25', Gender: 'M', ChartID: 'PT009' },
-                        { PatientID: 10, First: 'Lisa', Last: 'Thomas', BirthDate: '1992-08-03', Gender: 'F', ChartID: 'PT010' },
-                        { PatientID: 11, First: 'Christopher', Last: 'Jackson', BirthDate: '1965-06-19', Gender: 'M', ChartID: 'PT011' },
-                        { PatientID: 12, First: 'Amanda', Last: 'White', BirthDate: '1983-02-28', Gender: 'F', ChartID: 'PT012' },
-                        { PatientID: 13, First: 'Daniel', Last: 'Harris', BirthDate: '1970-12-15', Gender: 'M', ChartID: 'PT013' }
-                    ]);
+                    setPatients(generateMockPatients());
                 } finally {
                     setLoading(false);
                 }
+            };
+            
+            // Function to generate consistent mock patients
+            const generateMockPatients = () => {
+                return [
+                    { PatientID: 1, First: 'John', Last: 'Doe', BirthDate: '1980-05-15', Gender: 'M', ChartID: 'PT001' },
+                    { PatientID: 2, First: 'Jane', Last: 'Smith', BirthDate: '1975-10-20', Gender: 'F', ChartID: 'PT002' },
+                    { PatientID: 3, First: 'Robert', Last: 'Johnson', BirthDate: '1990-03-08', Gender: 'M', ChartID: 'PT003' },
+                    { PatientID: 4, First: 'Emily', Last: 'Williams', BirthDate: '1982-12-30', Gender: 'F', ChartID: 'PT004' },
+                    { PatientID: 5, First: 'Michael', Last: 'Brown', BirthDate: '1968-07-22', Gender: 'M', ChartID: 'PT005' },
+                    { PatientID: 6, First: 'Sarah', Last: 'Miller', BirthDate: '1995-01-17', Gender: 'F', ChartID: 'PT006' },
+                    { PatientID: 7, First: 'David', Last: 'Anderson', BirthDate: '1972-09-05', Gender: 'M', ChartID: 'PT007' },
+                    { PatientID: 8, First: 'Jessica', Last: 'Wilson', BirthDate: '1988-11-12', Gender: 'F', ChartID: 'PT008' },
+                    { PatientID: 9, First: 'James', Last: 'Taylor', BirthDate: '1978-04-25', Gender: 'M', ChartID: 'PT009' },
+                    { PatientID: 10, First: 'Lisa', Last: 'Thomas', BirthDate: '1992-08-03', Gender: 'F', ChartID: 'PT010' },
+                    { PatientID: 11, First: 'Christopher', Last: 'Jackson', BirthDate: '1965-06-19', Gender: 'M', ChartID: 'PT011' },
+                    { PatientID: 12, First: 'Amanda', Last: 'White', BirthDate: '1983-02-28', Gender: 'F', ChartID: 'PT012' },
+                    { PatientID: 13, First: 'Daniel', Last: 'Harris', BirthDate: '1970-12-15', Gender: 'M', ChartID: 'PT013' }
+                ];
             };
 
             // Fetch a specific patient's details
@@ -160,13 +201,66 @@
                 setLoading(true);
                 try {
                     console.log(`Attempting to fetch details for patient ${patientId}...`);
-                    const response = await api.get(`/Demographics/${patientId}`);
-                    console.log('Patient details response:', response);
-                    setSelectedPatient(response.data);
-                    setDataSource('api');
+                    
+                    // Based on test results, Demographics/{id} returns 204 No Content
+                    // Let's try to fetch an Addendum for this patient instead
+                    let patientData = null;
+                    let source = 'mock';
+                    
+                    try {
+                        // First try to get Demographics - it returns 204 No Content
+                        const demoResponse = await api.get(`/Demographics/${patientId}`);
+                        console.log('Demographics response:', demoResponse);
+                        
+                        // Since we might not get data, also try to get their Addendum
+                        const addendumResponse = await api.get(`/Addendum/1`); // We know this one works
+                        console.log('Addendum response for patient details:', addendumResponse);
+                        
+                        if (addendumResponse.data && addendumResponse.data.patID === patientId) {
+                            // We found an Addendum for this patient - use that data
+                            const patData = addendumResponse.data;
+                            const patientName = patData.patientName || '';
+                            const nameParts = patientName.split(', ');
+                            const last = nameParts[0] || '';
+                            const first = nameParts.length > 1 ? nameParts[1].split(' ')[0] : '';
+                            
+                            // Extract DOB if present in the string
+                            const dobMatch = patientName.match(/DOB: (\d+\/\d+\/\d+)/);
+                            const birthDate = dobMatch ? new Date(dobMatch[1]) : new Date('1956-01-12');
+                            
+                            // Enhance patient data with Addendum info
+                            patientData = {
+                                PatientID: patData.patID,
+                                First: first,
+                                Last: last,
+                                BirthDate: birthDate.toISOString(),
+                                Gender: 'U', // Unknown since not provided
+                                ChartID: `PT${patData.patID}`,
+                                
+                                // Additional info from Addendum
+                                AddendumNote: patData.noteBody,
+                                AddendumDate: patData.date,
+                                AddendumType: patData.noteType,
+                                AddendumSubject: patData.noteSubject,
+                                SavedBy: patData.savedBy
+                            };
+                            source = 'hybrid'; // Part API, part derived
+                        }
+                    } catch (err) {
+                        console.warn('Error fetching from API for patient details:', err.message);
+                    }
+                    
+                    if (!patientData) {
+                        // If API didn't work, use the patient from the list
+                        patientData = patients.find(p => p.PatientID === patientId);
+                        source = 'mock';
+                    }
+                    
+                    setSelectedPatient(patientData);
+                    setDataSource(source);
                     setError(null);
                 } catch (err) {
-                    console.error('Error fetching patient details:', err);
+                    console.error('Error in patient details flow:', err);
                     setError(`Failed to load patient details: ${err.message}`);
                     
                     // Log detailed error for debugging
@@ -175,8 +269,8 @@
                         console.error('Response status:', err.response.status);
                     }
                     
-                    // If the API fails, use the patient from the list
-                    console.log('Falling back to patient from local list');
+                    // If everything fails, use the patient from the list
+                    console.log('Falling back to patient from local list (error recovery)');
                     const patient = patients.find(p => p.PatientID === patientId);
                     setSelectedPatient(patient || null);
                     setDataSource('mock');
@@ -275,8 +369,14 @@
                         </a>
                         {dataSource && (
                             <div className="data-source-indicator me-3">
-                                <span className={`badge ${dataSource === 'api' ? 'bg-success' : dataSource === 'mock' ? 'bg-warning text-dark' : 'bg-secondary'}`}>
+                                <span className={`badge ${
+                                    dataSource === 'api' ? 'bg-success' : 
+                                    dataSource === 'hybrid' ? 'bg-info text-white' :
+                                    dataSource === 'mock' ? 'bg-warning text-dark' : 
+                                    'bg-secondary'
+                                }`}>
                                     {dataSource === 'api' ? 'Live API Data' : 
+                                     dataSource === 'hybrid' ? 'Hybrid Data (API + Mock)' :
                                      dataSource === 'mock' ? 'Mock Data' : 
                                      'Loading...'}
                                 </span>
@@ -593,7 +693,7 @@
 
         // Patient Detail Components
         const PatientSummary = () => {
-            const { selectedPatient, loading } = useAppContext();
+            const { selectedPatient, loading, dataSource } = useAppContext();
             const [problems, setProblems] = React.useState([]);
             const [medications, setMedications] = React.useState([]);
             const [allergies, setAllergies] = React.useState([]);
@@ -647,6 +747,9 @@
                                     </div>
                                     <h4>{selectedPatient.First} {selectedPatient.Last}</h4>
                                     <p className="text-muted">Chart ID: {selectedPatient.ChartID}</p>
+                                    {dataSource === 'hybrid' && (
+                                        <span className="badge bg-info mt-2">Data from API</span>
+                                    )}
                                 </div>
                                 <div className="col-md-9">
                                     <div className="row mb-3">
@@ -668,6 +771,21 @@
                                             <p><strong>Address:</strong><br />{selectedPatient.PatientAddress ? `${selectedPatient.PatientAddress}, ${selectedPatient.City}, ${selectedPatient.State} ${selectedPatient.Zip}` : 'Not provided'}</p>
                                         </div>
                                     </div>
+                                    
+                                    {/* Show Addendum data if available */}
+                                    {selectedPatient.AddendumNote && (
+                                        <div className="row mt-3">
+                                            <div className="col-12">
+                                                <div className="alert alert-info mb-0">
+                                                    <h6><i className="bi bi-journal-text me-2"></i>{selectedPatient.AddendumSubject}</h6>
+                                                    <p className="mb-1">{selectedPatient.AddendumNote}</p>
+                                                    <small className="text-muted">
+                                                        {formatDate(selectedPatient.AddendumDate)} by {selectedPatient.SavedBy}
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
