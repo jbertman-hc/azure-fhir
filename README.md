@@ -89,9 +89,9 @@ The application includes an integrated API Testing interface and several diagnos
 
 The application also displays a badge in the top navigation bar indicating the current data source:
 
-- 🟢 **Live API Data** - Successfully connected to the Azure backend API with full data
-- 🔵 **Hybrid Data** - Connected to the API but using a mix of API data and mock data
-- 🟠 **Mock Data** - Using mock data because the API connection failed
+- **Live API Data** - Successfully connected to the Azure backend API with full data
+- **Hybrid Data** - Connected to the API but using a mix of API data and mock data
+- **Mock Data** - Using mock data because the API connection failed
 
 If you're experiencing connectivity issues:
 - Check that the Azure API is online and accessible
@@ -139,3 +139,21 @@ The application is designed to handle 204 No Content responses from the API by:
    - Finally fall back to mock data
 
 This ensures the application can display useful information even when primary data sources are unavailable.
+
+## FHIR Mapping Layer
+
+In addition to the frontend application, this repository now includes a C# project focused on creating a FHIR R4 mapping layer. The goal is to transform data from the legacy system's underlying database (accessed via SQL repositories) into standardized FHIR resources.
+
+### Progress
+
+*   **Mapper Development:** C# classes (`FHIRMappers/*.cs`) have been created to map legacy data models (approximated in `Models/*.cs`) to various FHIR resources (Patient, Observation, Condition, Encounter, Procedure, Organization, Practitioner, etc.).
+*   **Organization & Practitioner Mapping:** Focused effort on mapping `PracticeInfo` and `ReferProviders` data (from `DataAccess/SQLRepos/`) to FHIR `Organization` and `Practitioner` resources, respectively. Placeholder data retrieval logic is currently implemented.
+*   **Reference Integration:** The `EncounterMapper` and `ProcedureMapper` have been updated to utilize the `OrganizationMapper` and `PractitionerMapper` for resolving references like `serviceProvider`, `participant`, and `performer`.
+*   **Flags for Refinement:** Placeholders (`<<< FLAG: ... >>>`) are used extensively within the mappers to mark areas requiring further investigation, confirmation of mapping logic, or implementation of specific transformations.
+*   **Repository Change:** The primary Git remote for this repository has been updated to `https://github.com/jbertman-hc/azure-fhir.git`.
+
+### Documentation & Next Steps
+
+Detailed documentation regarding the mapping approach, specific mapper status, and a full list of next steps can be found in the [mapping/README.md](./mapping/README.md) file.
+
+The current immediate focus is on integrating the `OrganizationMapper` and `PractitionerMapper` into the `PatientMapper` to handle the `generalPractitioner` reference.
