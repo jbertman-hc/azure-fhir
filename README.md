@@ -31,21 +31,37 @@ npm install
 
 ### Running the Application
 
-Start the development server:
+1.  **Start the Node.js Server:**
+    ```bash
+    cd /path/to/claude_ac_directsql
+    npm install
+    npm run dev
+    ```
+    This starts the Express server (defaulting to port 3000) which acts as a proxy to the Azure API and serves the `index.html` frontend.
 
-```bash
-npm start
-```
+2.  **Access the Frontend:**
+    Open your web browser and navigate to `http://localhost:3000` (or the port specified in the server startup logs).
 
-Or, if you want to use nodemon for auto-reloading during development:
+## Frontend Loading Sequence & Activity Log
 
-```bash
-npm run dev
-```
+The frontend (`index.html`) implements a specific sequence when loading patient data:
 
-The application will be available at http://localhost:3000.
+1.  **Health Check:** Upon initial load or refresh, the frontend first sends a request to the server's `/health` endpoint. This acts as a quick ping to ensure the server is running and reachable before proceeding.
+2.  **List Patient IDs:** If the health check is successful, it calls the server's `/list-all-patients` endpoint. This endpoint scans various potential backend data sources (e.g., `PatientIndex`, `PatientDemographics`, `PatientDemographicsAddendum` on the Azure API) to compile a list of all *potential* patient IDs.
+3.  **Fetch Patient Details:** For each unique patient ID returned (up to a limit, currently 13), the frontend calls the server's `/test-patient-demographics/:id` endpoint. This endpoint gathers detailed demographic and potentially other data for that specific patient ID from multiple underlying Azure API endpoints, combining the results.
 
-### Debugging API Connectivity
+**Activity Log:**
+
+*   **During Loading:** While the above sequence is in progress, an activity log is displayed showing each step (health check, ID list fetch, detail fetches) and the outcome (success/failure, status codes, data found). Log messages appear with the newest entry at the top.
+*   **Persistent Log:** The complete activity log from the most recent data fetch sequence is preserved. It can be viewed after loading is complete by navigating to the "API Testing" section in the sidebar. This allows reviewing the steps taken even after the main UI is rendered. A "Clear Log" button is available in the API Testing view.
+
+## Key Components
+
+*   **`index.html`:** Contains the entire frontend application logic (React components, state management via `useContext`, API call functions, UI rendering).
+*   **`server.js`:** The Node.js Express backend. Handles:
+    *   Serving `index.html`.
+
+## Debugging API Connectivity
 
 The application includes an integrated API Testing interface and several diagnostic tools:
 

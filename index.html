@@ -207,6 +207,11 @@
                     tooltip = "Loading data...";
                     display = "Loading...";
                     break;
+                case 'error':
+                    badge = "danger";
+                    tooltip = "Error loading data";
+                    display = "Error";
+                    break;
                 default:
                     badge = "danger";
                     tooltip = "Unknown data source";
@@ -229,21 +234,51 @@
         const AppProvider = ({ children }) => {
             const [patients, setPatients] = React.useState([]);
             const [selectedPatient, setSelectedPatient] = React.useState(null);
-            const [loading, setLoading] = React.useState(false);
+            const [loading, setLoading] = React.useState(true);
             const [error, setError] = React.useState(null);
             const [view, setView] = React.useState('dashboard'); // dashboard, patients, patient-detail, etc.
             const [activeModule, setActiveModule] = React.useState('summary'); // summary, allergies, medications, etc.
             const [dataSource, setDataSource] = React.useState('loading'); // 'api' or 'mock'
+            const [apiActivityLog, setApiActivityLog] = React.useState([]); // <<< ADDED STATE
+
+            // Helper function to add logs
+            const logActivity = (logEntry) => {
+                setApiActivityLog(prevLog => [...prevLog, { ...logEntry, timestamp: new Date() }]);
+            };
 
             // Fetch patients
             const fetchPatients = async () => {
                 setLoading(true);
+                setError(null);
+                setApiActivityLog([]); // Clear log on new fetch
+                
+                // 1. Health Check / Ping
+                logActivity({ type: 'start', message: 'Initiating fetch sequence... Checking server health.' });
+                try {
+                    const healthResponse = await fetch('/health');
+                    if (!healthResponse.ok) {
+                        throw new Error(`Server health check failed with status: ${healthResponse.status}`);
+                    }
+                    const healthResult = await healthResponse.json();
+                    logActivity({ type: 'info', message: `Server health check successful: ${healthResult.message}` });
+                } catch (healthErr) {
+                    console.error('Server health check failed:', healthErr);
+                    setError(`Cannot connect to server: ${healthErr.message}`);
+                    logActivity({ type: 'error', message: `Health check failed: ${healthErr.message}` });
+                    setDataSource('error');
+                    setLoading(false);
+                    return; // Stop fetching if health check fails
+                }
+
+                // 2. Fetch Patient List
                 try {
                     console.log('Attempting to fetch all patients using all available means...');
+                    logActivity({ type: 'info', message: 'Scanning for available patient IDs via /list-all-patients...' });
                     
                     // Use our more comprehensive patient scanning endpoint
                     const response = await fetch('/list-all-patients');
                     const result = await response.json();
+                    logActivity({ type: 'api_result', endpoint: '/list-all-patients', status: response.status, success: result.success });
                     
                     let patientIds = [];
                     
@@ -271,22 +306,23 @@
                     
                     console.log(`Patient IDs to fetch: ${patientIds.join(', ')}`);
                     
-                    // If we don't have any patient IDs, add the known ones
-                    if (patientIds.length === 0) {
-                        patientIds = [1001, 1033]; // William Saffire and Bobo the Clown
-                    }
-                    
                     // Fetch details for each patient
                     const apiPatients = [];
                     
                     // Limit the number of patients we fetch (first 13 maximum)
                     const patientIdsToFetch = patientIds.slice(0, 13);
                     
+                    logActivity({ type: 'info', message: `Found ${result.patientSamples?.length || 0} potential patient IDs from sources: ${result.sources?.join(', ') || 'N/A'}` });
+                    
+                    logActivity({ type: 'info', message: `Attempting to fetch details for ${patientIdsToFetch.length} unique patient IDs...` });
+                    
                     for (const patientId of patientIdsToFetch) {
                         try {
                             // Use our enhanced endpoint to get complete patient data
+                            logActivity({ type: 'api_call', endpoint: `/test-patient-demographics/${patientId}`, message: `Fetching details for patient ${patientId}...` });
                             const detailResponse = await fetch(`/test-patient-demographics/${patientId}`);
                             const detailResult = await detailResponse.json();
+                            logActivity({ type: 'api_result', endpoint: `/test-patient-demographics/${patientId}`, status: detailResponse.status, success: detailResult.success, hasData: !!detailResult.result?.data });
                             
                             if (detailResult.success && detailResult.result && detailResult.result.data) {
                                 const patientInfo = detailResult.result.data;
@@ -299,64 +335,51 @@
                                     BirthDate: patientInfo.birthDate || new Date().toISOString(),
                                     Gender: patientInfo.gender || 'U',
                                     ChartID: patientInfo.chartId || `PT${patientId}`,
+                                    
+                                    // Store endpoint test attempts for debugging
+                                    Attempts: detailResult.result.attempts,
+                                    
+                                    // Include source-specific data
                                     Source: patientInfo.source,
-                                    Attempts: detailResult.result.attempts
+                                    RawData: patientInfo.rawData || null
                                 };
                                 
-                                // Add source-specific data
+                                // Add source-specific data 
                                 if (patientInfo.source === 'Addendum') {
                                     patient.AddendumNote = patientInfo.addendumNote;
                                     patient.AddendumDate = patientInfo.addendumDate;
                                 }
                                 
-                                // Add raw data if available
-                                if (patientInfo.rawData) {
-                                    patient.RawData = patientInfo.rawData;
-                                }
-                                
                                 apiPatients.push(patient);
                                 console.log(`Successfully fetched patient ${patientId} from ${patientInfo.source}`);
+                                logActivity({ type: 'info', message: `Successfully processed data for patient ${patientId} from ${patientInfo.source}` });
                             }
                         } catch (error) {
                             console.warn(`Error fetching patient ${patientId}:`, error.message);
+                            logActivity({ type: 'error', endpoint: `/test-patient-demographics/${patientId}`, message: `Error fetching details for patient ${patientId}: ${error.message}` });
                         }
                     }
                     
                     // If we have at least one API patient
                     if (apiPatients.length > 0) {
                         console.log(`Fetched ${apiPatients.length} patients from API`);
-                        
-                        // Fill in the rest with mock data if needed
-                        if (apiPatients.length < 5) {
-                            console.log('Adding mock patients to supplement API data');
-                            const mockPatients = generateMockPatients();
-                            
-                            // Add mock patients until we have at least 13
-                            for (let i = 0; i < mockPatients.length && apiPatients.length < 13; i++) {
-                                // Ensure we're not adding duplicates
-                                const mockPatientId = mockPatients[i].PatientID;
-                                if (!apiPatients.some(p => p.PatientID === mockPatientId)) {
-                                    // Mark as mock data
-                                    mockPatients[i].Source = 'mock';
-                                    apiPatients.push(mockPatients[i]);
-                                }
-                            }
-                            
-                            setDataSource('hybrid');
-                        } else {
-                            setDataSource('api');
-                        }
-                        
+                        setDataSource('api'); // Always set to API if we got any
                         setPatients(apiPatients);
                         setError(null);
+                        logActivity({ type: 'info', message: `API search complete. Successfully loaded data for ${apiPatients.length} patients.` });
                     } else {
-                        // If no patients found from API, fall back to mock data
-                        console.log('No patients found from API, falling back to mock data');
-                        throw new Error('No patients found from API endpoints');
+                        // If no patients found from API, set state accordingly
+                        console.log('No patients found from API endpoints.');
+                        setDataSource('api'); // Still indicate API was attempted
+                        setPatients([]); // Set to empty array
+                        setError('No patients found via API.'); // Set a specific message
+                        logActivity({ type: 'info', message: 'API search complete. No patients with data found.' });
+                        // We no longer throw an error here, just handle the empty state
                     }
                 } catch (err) {
                     console.error('Error fetching patients:', err);
                     setError(`Failed to load patients from API: ${err.message}`);
+                    logActivity({ type: 'error', message: `Critical error during patient fetch: ${err.message}` });
                     // Log more detailed error information for debugging
                     if (err.response) {
                         console.error('Response data:', err.response.data);
@@ -366,11 +389,13 @@
                         console.error('Request made but no response received:', err.request);
                     }
                     
-                    // For demo purposes, create sample patients if API fails
-                    console.log('Falling back to mock data');
-                    setDataSource('mock');
-                    setPatients(generateMockPatients());
+                    // Explicitly set to empty and error state, no mock fallback
+                    console.log('Setting UI to error state, no mock data fallback.');
+                    setDataSource('error');
+                    setPatients([]); 
                 } finally {
+                    const finalPatientCount = patients?.length || 0;
+                    logActivity({ type: 'end', message: `Patient list fetch sequence complete. Final count: ${finalPatientCount}` });
                     setLoading(false);
                 }
             };
@@ -535,6 +560,7 @@
                     view,
                     activeModule,
                     dataSource,
+                    apiActivityLog,
                     setView,
                     setActiveModule,
                     fetchPatients,
@@ -542,7 +568,9 @@
                     setSelectedPatient,
                     fetchPatientAllergies,
                     fetchPatientMedications,
-                    fetchPatientProblems
+                    fetchPatientProblems,
+                    logActivity,
+                    setApiActivityLog
                 }}>
                     {children}
                 </AppContext.Provider>
@@ -659,20 +687,47 @@
             );
         };
 
-        // Loading Spinner Component
-        const LoadingSpinner = () => (
-            <div className="loading-spinner">
-                <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
+        // Loading Component with Activity Log
+        const LoadingWithLog = () => {
+            const { apiActivityLog } = useAppContext();
+
+            return (
+                <div className="p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+                    <h4>Loading Data...</h4>
+                    <div className="progress mb-3">
+                        <div className="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style={{ width: '100%' }}></div>
+                    </div>
+                    <div className="card">
+                        <div className="card-header">
+                            Activity Log
+                        </div>
+                        <ul className="list-group list-group-flush" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                            {apiActivityLog.slice().reverse().map((entry, index) => (
+                                <li key={index} className="list-group-item small">
+                                    <span className={`badge ${entry.type === 'start' || entry.type === 'end' ? 'bg-primary' : entry.type === 'info' ? 'bg-info' : entry.type === 'api_call' ? 'bg-secondary' : entry.type === 'api_result' ? (entry.success ? 'bg-success' : 'bg-warning') : entry.type === 'error' ? 'bg-danger' : 'bg-dark'} me-2`}>
+                                        {entry.type?.toUpperCase()}
+                                    </span>
+                                    <span className="me-2">
+                                        {entry.message}
+                                        {entry.endpoint && <code className="ms-1">{entry.endpoint}</code>}
+                                        {typeof entry.status !== 'undefined' && <span className="ms-1">(Status: {entry.status})</span>}
+                                        {typeof entry.success !== 'undefined' && <span className="ms-1">({entry.success ? 'Success' : 'Failed'})</span>}
+                                        {typeof entry.hasData !== 'undefined' && <span className="ms-1">({entry.hasData ? 'Data Found' : 'No Data'})</span>}
+                                    </span>
+                                    <small className="text-muted float-end">{entry.timestamp.toLocaleTimeString()}</small>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
                 </div>
-            </div>
-        );
+            );
+        };
 
         // Dashboard Component
         const Dashboard = () => {
             const { patients, setView, loading, error, dataSource } = useAppContext();
             
-            if (loading) return <LoadingSpinner />;
+            if (loading) return <LoadingWithLog />;
             
             return (
                 <div className="p-4">
@@ -705,8 +760,8 @@
                             <div className="card dashboard-card bg-success text-white">
                                 <div className="card-body">
                                     <h5 className="card-title">Appointments Today</h5>
-                                    <p className="card-text display-4">5</p>
-                                    <p className="card-text"><small>Scheduled for today</small></p>
+                                    <p className="card-text display-4">N/A</p>
+                                    <p className="card-text"><small>Data not available</small></p>
                                 </div>
                             </div>
                         </div>
@@ -714,8 +769,8 @@
                             <div className="card dashboard-card bg-warning text-dark">
                                 <div className="card-body">
                                     <h5 className="card-title">Pending Labs</h5>
-                                    <p className="card-text display-4">3</p>
-                                    <p className="card-text"><small>Awaiting results</small></p>
+                                    <p className="card-text display-4">N/A</p>
+                                    <p className="card-text"><small>Data not available</small></p>
                                 </div>
                             </div>
                         </div>
@@ -723,8 +778,8 @@
                             <div className="card dashboard-card bg-info text-white">
                                 <div className="card-body">
                                     <h5 className="card-title">Unread Messages</h5>
-                                    <p className="card-text display-4">7</p>
-                                    <p className="card-text"><small>Requiring attention</small></p>
+                                    <p className="card-text display-4">N/A</p>
+                                    <p className="card-text"><small>Data not available</small></p>
                                 </div>
                             </div>
                         </div>
@@ -765,40 +820,13 @@
                                             <tr>
                                                 <th>Time</th>
                                                 <th>Patient</th>
-                                                <th>Provider</th>
                                                 <th>Type</th>
+                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <td>9:00 AM</td>
-                                                <td>John Doe</td>
-                                                <td>Dr. Smith</td>
-                                                <td>Check-up</td>
-                                            </tr>
-                                            <tr>
-                                                <td>10:30 AM</td>
-                                                <td>Jane Smith</td>
-                                                <td>Dr. Johnson</td>
-                                                <td>Follow-up</td>
-                                            </tr>
-                                            <tr>
-                                                <td>1:15 PM</td>
-                                                <td>Robert Johnson</td>
-                                                <td>Dr. Smith</td>
-                                                <td>Annual Physical</td>
-                                            </tr>
-                                            <tr>
-                                                <td>2:45 PM</td>
-                                                <td>Emily Williams</td>
-                                                <td>Dr. Johnson</td>
-                                                <td>Lab Review</td>
-                                            </tr>
-                                            <tr>
-                                                <td>4:00 PM</td>
-                                                <td>Michael Brown</td>
-                                                <td>Dr. Smith</td>
-                                                <td>Follow-up</td>
+                                                <td colSpan="4" className="text-center text-muted">Schedule data not available</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -815,7 +843,7 @@
             const { patients, loading, setView, setSelectedPatient, fetchPatientDetails } = useAppContext();
             const [searchTerm, setSearchTerm] = React.useState('');
             
-            if (loading) return <LoadingSpinner />;
+            if (loading) return <LoadingWithLog />;
             
             const filteredPatients = patients.filter(patient => {
                 const fullName = `${patient.First} ${patient.Last}`.toLowerCase();
@@ -912,7 +940,7 @@
                 }
             }, [selectedPatient]);
             
-            if (loading || loading2 || !selectedPatient) return <LoadingSpinner />;
+            if (loading || loading2 || !selectedPatient) return <LoadingWithLog />;
             
             // Calculate age
             const calculateAge = (birthDate) => {
@@ -1089,22 +1117,7 @@
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <td>2023-03-15</td>
-                                                <td>Dr. Smith</td>
-                                                <td>Follow-up</td>
-                                                <td><button className="btn btn-sm btn-outline-primary">View</button></td>
-                                            </tr>
-                                            <tr>
-                                                <td>2022-12-01</td>
-                                                <td>Dr. Johnson</td>
-                                                <td>Annual Physical</td>
-                                                <td><button className="btn btn-sm btn-outline-primary">View</button></td>
-                                            </tr>
-                                            <tr>
-                                                <td>2022-09-10</td>
-                                                <td>Dr. Smith</td>
-                                                <td>Sick Visit</td>
-                                                <td><button className="btn btn-sm btn-outline-primary">View</button></td>
+                                                <td colSpan="4" className="text-center text-muted">Encounter data not available</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -1130,25 +1143,7 @@
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <td>2023-03-15</td>
-                                                <td>128/82</td>
-                                                <td>72</td>
-                                                <td>98.6</td>
-                                                <td>185 lbs</td>
-                                            </tr>
-                                            <tr>
-                                                <td>2022-12-01</td>
-                                                <td>130/84</td>
-                                                <td>70</td>
-                                                <td>98.2</td>
-                                                <td>187 lbs</td>
-                                            </tr>
-                                            <tr>
-                                                <td>2022-09-10</td>
-                                                <td>138/88</td>
-                                                <td>75</td>
-                                                <td>99.1</td>
-                                                <td>190 lbs</td>
+                                                <td colSpan="5" className="text-center text-muted">Vital signs data not available</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -1163,7 +1158,7 @@
         const PatientDemographics = () => {
             const { selectedPatient, loading } = useAppContext();
             
-            if (loading || !selectedPatient) return <LoadingSpinner />;
+            if (loading || !selectedPatient) return <LoadingWithLog />;
             
             return (
                 <div className="p-4">
@@ -1326,7 +1321,7 @@
                 }
             }, [selectedPatient]);
             
-            if (loading) return <LoadingSpinner />;
+            if (loading) return <LoadingWithLog />;
             
             return (
                 <div className="p-4">
@@ -1397,7 +1392,7 @@
                 }
             }, [selectedPatient]);
             
-            if (loading) return <LoadingSpinner />;
+            if (loading) return <LoadingWithLog />;
             
             return (
                 <div className="p-4">
@@ -1474,7 +1469,7 @@
                 }
             }, [selectedPatient]);
             
-            if (loading) return <LoadingSpinner />;
+            if (loading) return <LoadingWithLog />;
             
             return (
                 <div className="p-4">
@@ -1536,6 +1531,7 @@
 
         // API Testing Tools Component
         const ApiTestingTools = () => {
+            const { apiActivityLog, logActivity, setApiActivityLog } = useAppContext();
             const [testResults, setTestResults] = React.useState(null);
             const [loading, setLoading] = React.useState(false);
             const [endpoint, setEndpoint] = React.useState("");
@@ -1675,7 +1671,7 @@
             };
             
             return (
-                <div className="p-4">
+                <div className="p-4" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)' /* Adjust based on header height */ }}>
                     <h2 className="mb-4">API Testing Tools</h2>
                     
                     <div className="row mb-4">
@@ -1781,38 +1777,89 @@
                             </div>
                         </div>
                     )}
+                    
+                    <div className="card mt-4 flex-grow-1" style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div className="card-header d-flex justify-content-between align-items-center">
+                            <span>Last Fetch Activity Log</span>
+                            <button 
+                                className="btn btn-sm btn-outline-secondary"
+                                onClick={() => setApiActivityLog([])}
+                            >
+                                Clear Log
+                            </button>
+                        </div>
+                        <div className="card-body" style={{ flexGrow: 1, overflowY: 'auto', maxHeight: '400px' /* Example max height */ }}>
+                            {apiActivityLog.length === 0 ? (
+                                <p className="text-muted">No activity logged yet. Refresh data or run a test.</p>
+                            ) : (
+                                <ul className="list-group list-group-flush">
+                                    {apiActivityLog.slice().reverse().map((entry, index) => (
+                                        <li key={index} className="list-group-item small">
+                                            <span className={`badge ${entry.type === 'start' || entry.type === 'end' ? 'bg-primary' : entry.type === 'info' ? 'bg-info' : entry.type === 'api_call' ? 'bg-secondary' : entry.type === 'api_result' ? (entry.success ? 'bg-success' : 'bg-warning') : entry.type === 'error' ? 'bg-danger' : 'bg-dark'} me-2`}>
+                                                {entry.type?.toUpperCase()}
+                                            </span>
+                                            <span className="me-2">
+                                                {entry.message}
+                                                {entry.endpoint && <code className="ms-1">{entry.endpoint}</code>}
+                                                {typeof entry.status !== 'undefined' && <span className="ms-1">(Status: {entry.status})</span>}
+                                                {typeof entry.success !== 'undefined' && <span className="ms-1">({entry.success ? 'Success' : 'Failed'})</span>}
+                                                {typeof entry.hasData !== 'undefined' && <span className="ms-1">({entry.hasData ? 'Data Found' : 'No Data'})</span>}
+                                            </span>
+                                            <small className="text-muted float-end">{entry.timestamp.toLocaleTimeString()}</small>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
                 </div>
             );
         };
 
         // App Component
         const App = () => {
-            const { view, activeModule } = useAppContext();
-            
-            const renderContent = () => {
-                if (view === 'dashboard') {
-                    return <Dashboard />;
-                } else if (view === 'patients') {
-                    return <PatientList />;
-                } else if (view === 'patient-detail') {
+            const { view, activeModule, loading } = useAppContext();
+
+            // Render loading state with activity log
+            if (loading) {
+                return <LoadingWithLog />;
+            }
+
+            let currentView;
+            switch (view) {
+                case 'dashboard':
+                    currentView = <Dashboard />;
+                    break;
+                case 'patients':
+                    currentView = <PatientList />;
+                    break;
+                case 'patient-detail':
                     switch (activeModule) {
                         case 'summary':
-                            return <PatientSummary />;
+                            currentView = <PatientSummary />;
+                            break;
                         case 'demographics':
-                            return <PatientDemographics />;
+                            currentView = <PatientDemographics />;
+                            break;
                         case 'problems':
-                            return <PatientProblems />;
+                            currentView = <PatientProblems />;
+                            break;
                         case 'medications':
-                            return <PatientMedications />;
+                            currentView = <PatientMedications />;
+                            break;
                         case 'allergies':
-                            return <PatientAllergies />;
+                            currentView = <PatientAllergies />;
+                            break;
                         default:
-                            return <PatientSummary />;
+                            currentView = <PatientSummary />;
                     }
-                } else if (view === 'api-testing') {
-                    return <ApiTestingTools />;
-                }
-            };
+                    break;
+                case 'api-testing':
+                    currentView = <ApiTestingTools />;
+                    break;
+                default:
+                    currentView = <Dashboard />;
+            }
             
             return (
                 <div>
@@ -1821,7 +1868,7 @@
                         <div className="row">
                             <Sidebar />
                             <div className={view === 'patient-detail' ? 'col-md-10' : 'col-md-12'}>
-                                {renderContent()}
+                                {currentView}
                             </div>
                         </div>
                     </div>

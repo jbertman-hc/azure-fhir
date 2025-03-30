@@ -8,6 +8,12 @@ const PORT = process.env.PORT || 3000;
 
 // Enable CORS for all routes
 app.use(cors());
+app.use(express.json());
+
+// Basic health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Server is running' });
+});
 
 // Define API routes first (before static file serving)
 // This ensures our API endpoints get priority
@@ -515,6 +521,7 @@ app.get('/test-patient-demographics/:id', async (req, res) => {
         // If we have data, save it
         if (response.status === 200 && response.data) {
           const source = endpoint.split('/')[0];
+          console.log(`<<< Raw data received from ${endpoint} (Status ${response.status}):`, JSON.stringify(response.data));
           
           // Process the data based on source
           if (source === 'Demographics') {
@@ -533,6 +540,8 @@ app.get('/test-patient-demographics/:id', async (req, res) => {
               source: 'PatientIndex',
               acPatientId: response.data.AcPatientId,
               externalPatientId: response.data.ExternalPatientId,
+              firstName: response.data.First || response.data.firstName || response.data.GivenName,
+              lastName: response.data.Last || response.data.lastName || response.data.FamilyName,
               rawData: response.data
             };
             // Continue looking for better data sources
@@ -561,10 +570,13 @@ app.get('/test-patient-demographics/:id', async (req, res) => {
             if (!result.data) {
               result.data = {
                 source,
+                firstName: response.data.First || response.data.firstName || response.data.GivenName,
+                lastName: response.data.Last || response.data.lastName || response.data.FamilyName,
                 rawData: response.data
               };
             }
           }
+          console.log(`>>> Processed data assigned from ${source}:`, JSON.stringify(result.data));
         }
       } catch (error) {
         result.attempts.push({
