@@ -39,6 +39,67 @@ The mapping will be performed systematically, resource by resource (e.g., Patien
 2.  **Data Comparison:** Compare source data (via API or legacy app) with mapped FHIR resources for semantic accuracy.
 3.  **Clinical Review:** Facilitate review by clinicians/end-users to confirm clinical validity.
 
+## Mappers Implemented / In Progress
+
+*   **PatientMapper.cs:** Maps `DemographicsDomain` -> `Patient` (US Core)
+*   **VitalSignMapper.cs:** Maps `VitalSignItem` -> `Observation` (US Core Vital Signs)
+*   **ConditionMapper.cs:** (Placeholder) Maps `ProblemListItem` -> `Condition`
+*   **AllergyIntoleranceMapper.cs:** (Placeholder) Maps `AllergyItem` -> `AllergyIntolerance`
+*   **MedicationRequestMapper.cs:** (Placeholder) Maps `MedicationRequestItem` -> `MedicationRequest`
+*   **MedicationStatementMapper.cs:** (Placeholder) Maps `MedicationStatementItem` -> `MedicationStatement`
+*   **ImmunizationMapper.cs:** (Placeholder) Maps `ImmunizationItem` -> `Immunization`
+*   **LabResultMapper.cs:** (Placeholder) Maps `LabResultItem` -> `Observation` (for individual results)
+*   **DiagnosticReportMapper.cs:** (Placeholder) Maps `LabReportItem` -> `DiagnosticReport` (for lab report header/context)
+*   **ProcedureMapper.cs:** Maps `ProcedureItem` -> `Procedure` (References `PractitionerMapper`)
+*   **EncounterMapper.cs:** Maps `EncounterItem` -> `Encounter` (References `PractitionerMapper` & `OrganizationMapper`)
+*   **DocumentReferenceMapper.cs:** (Placeholder) Maps `NoteItem` -> `DocumentReference`
+*   **OrganizationMapper.cs:** Maps `PracticeInfo` -> `Organization` (Placeholder data retrieval)
+*   **PractitionerMapper.cs:** Maps `ReferProviders` -> `Practitioner` (Placeholder data retrieval)
+
+## Data Models (Source POCOs - Placeholders)
+
+*   Models/DemographicsDomain.cs
+*   Models/VitalSignItem.cs
+*   Models/ProblemListItem.cs
+*   Models/AllergyItem.cs
+*   Models/MedicationRequestItem.cs
+*   Models/MedicationStatementItem.cs
+*   Models/ImmunizationItem.cs
+*   Models/LabResultItem.cs
+*   Models/LabReportItem.cs
+*   Models/ProcedureItem.cs
+*   Models/EncounterItem.cs
+*   Models/NoteItem.cs
+*   Models/PracticeInfo.cs
+*   Models/ProviderInfo.cs
+
+## Current Status (As of Checkpoint 5 / 2025-03-30)
+
+*   Initial mappers created for core US Core resources (Patient, Vital Signs).
+*   Placeholders established for most other required resources (Condition, Allergy, Meds, Labs, etc.).
+*   `PatientMapper` enhanced with US Core extension placeholders and identifier/telecom standardization.
+*   `VitalSignMapper` includes logic for common vital signs, LOINC codes, and placeholder unit conversions.
+*   Flags (`<<< FLAG: ... >>>`) added throughout mappers to identify areas needing source data clarification, mapping decisions, or team discussion.
+*   Placeholder POCOs (`PracticeInfo`, `ProviderInfo`) and Mappers (`OrganizationMapper`, `PractitionerMapper`) created based on likely repository sources (`PracticeInfoRepository`, `ReferProvidersRepository`).
+*   `OrganizationMapper` and `PractitionerMapper` updated with placeholder data retrieval logic and temporary internal domain models for compilation.
+*   `EncounterMapper` updated to create references using `OrganizationMapper` and `PractitionerMapper`.
+*   `ProcedureMapper` updated to create references using `PractitionerMapper`.
+
+## Next Steps
+
+1.  **Resolve References (`PatientMapper`):** Update `PatientMapper.cs` to resolve the `generalPractitioner` reference using `PractitionerMapper` and/or `OrganizationMapper` based on source data.
+2.  **Address Flags:** Systematically review and resolve the `<<< FLAG: ... >>>` and `TODO:` comments across all modified mappers (`Organization`, `Practitioner`, `Encounter`, `Procedure`, `Patient`).
+3.  **Implement Real Data Retrieval:** Replace placeholder data access in `OrganizationMapper` and `PractitionerMapper` with actual repository calls (likely requiring Dependency Injection setup).
+4.  **Refactor Domain Models:** Remove temporary internal domain model classes from mappers once actual `POC.Domain.DomainModels` are integrated/available.
+5.  **Ensure US Core Compliance:** Confirm all mandatory elements and required extensions for US Core profiles are correctly implemented.
+6.  **Testing:** Develop unit tests for the mappers.
+
 ## Starting Point
 
 Begin with the FHIR `Patient` resource, analyzing the `/Demographics` endpoint(s) in `swagger.json` as the primary input source.
+
+## Verification Support
+
+1.  **FHIR Validation:** Utilize standard FHIR validators to ensure structural correctness of generated resources against FHIR R4 and relevant profiles.
+2.  **Data Comparison:** Compare source data (via API or legacy app) with mapped FHIR resources for semantic accuracy.
+3.  **Clinical Review:** Facilitate review by clinicians/end-users to confirm clinical validity.
