@@ -150,6 +150,55 @@ namespace ClaudeAcDirectSql.FHIRMappers
             return practitioner;
         }
 
+        // Helper method to get a ResourceReference for a Practitioner based on ID
+        public static ResourceReference GetPractitionerReference(int practitionerId, IReferProvidersRepository referProvidersRepository)
+        {
+            if (referProvidersRepository == null)
+            {
+                // <<< FLAG: ReferProvidersRepository is null in GetPractitionerReference >>>
+                return null;
+            }
+
+            try
+            {
+                // <<< FLAG: Assuming GetReferProviders is synchronous. Adapt if async. >>>
+                var referProvider = referProvidersRepository.GetReferProviders(practitionerId);
+
+                if (referProvider == null || string.IsNullOrWhiteSpace(referProvider.ReferProviderID)) // Check if provider was actually found
+                {
+                    // <<< FLAG: Practitioner not found for ID: {practitionerId} >>>
+                    return null;
+                }
+
+                // Reuse the main mapping logic to ensure consistency
+                var practitioner = ToFhirPractitioner(referProvider);
+
+                if (practitioner == null || string.IsNullOrWhiteSpace(practitioner.Id))
+                {
+                     // <<< FLAG: ToFhirPractitioner returned null or Practitioner without ID for source ID: {practitionerId} >>>
+                    return null;
+                }
+
+                // Create the reference
+                var reference = new ResourceReference()
+                {
+                    Reference = $"Practitioner/{practitioner.Id}",
+                    // Construct a display name (adjust formatting as needed)
+                    Display = practitioner.Name.FirstOrDefault()?.ToString() ?? $"Practitioner {practitioner.Id}"
+                    // Display = referProvider.FirstName + " " + referProvider.LastName // Or use source data?
+                };
+
+                return reference;
+            }
+            catch (Exception ex)
+            {
+                // <<< FLAG: Exception occurred in GetPractitionerReference for ID {practitionerId}: {ex.Message} >>>
+                // Consider logging the exception
+                Console.WriteLine($"Error resolving Practitioner reference for ID {practitionerId}: {ex.Message}");
+                return null; // Return null on error to prevent cascading issues
+            }
+        }
+
         // <<< FLAG: This internal domain model simulation is for placeholder purposes >>>
         // Replace with actual POC.Domain.DomainModels.ReferProvidersDomain when available
         internal class ReferProvidersDomain

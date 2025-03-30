@@ -4,6 +4,10 @@ using ClaudeAcDirectSql.Models;
 using System.Collections.Generic;
 using System;
 using System.Linq;
+using POC.Domain.Models.Aggregators;
+using POC.Domain.Models.Context;
+using POC.Domain.Models.Entities;
+using POC.Infrastructure.Interfaces;
 
 namespace ClaudeAcDirectSql.FHIRMappers
 {
@@ -11,7 +15,7 @@ namespace ClaudeAcDirectSql.FHIRMappers
     {
         // Maps the DemographicsDomain object (from AC Direct SQL API)
         // to a FHIR R4 Patient resource, compliant with US Core 3.1.1 or higher.
-        public static Patient ToFhirPatient(DemographicsDomain source)
+        public static Patient ToFhirPatient(DemographicsDomain source, IReferProvidersRepository referProvidersRepository)
         {
             if (source == null)
             {
@@ -298,15 +302,45 @@ namespace ClaudeAcDirectSql.FHIRMappers
             }
 
             // --- General Practitioner ---
-            // TODO: Map primary care provider (PCP) if available (Reference to Practitioner or Organization)
-            if (!string.IsNullOrWhiteSpace(source.PreferredPhysician))
+            // Reference to Practitioner or Organization
+            // <<< FLAG: Assumption - PreferredPhysician contains the ID of a Practitioner.
+            // <<< FLAG: Assumption - GeneralPractitioner always refers to Practitioner, not Organization.
+            if (!string.IsNullOrWhiteSpace(source.PreferredPhysician) && referProvidersRepository != null)
             {
-                // <<< FLAG: Need strategy to resolve PreferredPhysician name into a Practitioner Reference
-                // Example: patient.GeneralPractitioner.Add(ResolvePractitionerReference(source.PreferredPhysician));
-                patient.GeneralPractitioner.Add(new ResourceReference()
+                if (int.TryParse(source.PreferredPhysician, out int practitionerId))
                 {
-                    Display = source.PreferredPhysician // Set display name, but need reference ID
-                });
+                    var practitionerReference = PractitionerMapper.GetPractitionerReference(practitionerId, referProvidersRepository);
+                    if (practitionerReference != null)
+                    {
+                        patient.GeneralPractitioner.Add(practitionerReference);
+                    }
+                    else
+                    {
+                        // <<< FLAG: Failed to resolve GeneralPractitioner reference for ID: {practitionerId}
+                        // Add a placeholder reference with display name if preferred, or omit.
+                         patient.GeneralPractitioner.Add(new ResourceReference()
+                         {
+                             Display = $"Unknown Practitioner (ID: {practitionerId})" // Or use original source.PreferredPhysician?
+                         });
+                    }
+                }
+                else
+                {
+                    // <<< FLAG: PreferredPhysician field ('{source.PreferredPhysician}') is not a valid integer ID.
+                    // Cannot resolve GeneralPractitioner reference.
+                    // Consider adding display-only reference if appropriate?
+                    // patient.GeneralPractitioner.Add(new ResourceReference() { Display = source.PreferredPhysician });
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(source.PreferredPhysician))
+            {
+                // No PreferredPhysician provided in source.
+            }
+            else if (referProvidersRepository == null)
+            {
+                 // <<< FLAG: ReferProvidersRepository not provided to PatientMapper, cannot resolve GeneralPractitioner.
+                 // Add display-only reference if needed.
+                 // patient.GeneralPractitioner.Add(new ResourceReference() { Display = source.PreferredPhysician });
             }
 
             // --- Managing Organization ---
