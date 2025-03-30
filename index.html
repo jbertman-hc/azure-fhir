@@ -85,9 +85,77 @@
             }
         };
         
+        // Function to search for available patients across different endpoints
+        const findAllAvailablePatients = async () => {
+            try {
+                console.log('Searching for all available patients...');
+                
+                // Use our specialized server endpoint to find patients
+                const response = await fetch('/list-all-patients');
+                const data = await response.json();
+                
+                console.log('All patients search results:', data);
+                
+                // Log a summary of the patients found
+                if (data.patientSamples && data.patientSamples.length > 0) {
+                    console.log(`Found ${data.patientSamples.length} potential patients`);
+                    
+                    // Group by source
+                    const bySource = data.patientSamples.reduce((acc, p) => {
+                        acc[p.source] = (acc[p.source] || 0) + 1;
+                        return acc;
+                    }, {});
+                    
+                    console.log('Patients by source:', bySource);
+                    
+                    // List the IDs of patients with actual data
+                    const patientsWithData = data.patientSamples.filter(p => p.hasData);
+                    console.log(`Patients with actual data: ${patientsWithData.length}`);
+                    console.log('IDs with data:', patientsWithData.map(p => p.patientId).join(', '));
+                }
+                
+                return data;
+            } catch (err) {
+                console.error('Error finding all patients:', err);
+                return null;
+            }
+        };
+        
+        // Function to test SQL repositories
+        const testSqlRepositories = async () => {
+            try {
+                console.log('Testing SQL repositories...');
+                
+                const response = await fetch('/sql-repositories');
+                const data = await response.json();
+                
+                console.log('SQL repository test results:', data);
+                
+                // Count successful repository endpoints
+                const successfulRepos = Object.entries(data.results)
+                    .filter(([_, result]) => result.success)
+                    .map(([repo, _]) => repo);
+                
+                console.log(`Successfully accessed ${successfulRepos.length} repository endpoints:`);
+                console.log(successfulRepos.join(', '));
+                
+                return data;
+            } catch (err) {
+                console.error('Error testing SQL repositories:', err);
+                return null;
+            }
+        };
+        
         // Run the test on page load
-        window.addEventListener('DOMContentLoaded', () => {
-            testBackendConnection();
+        window.addEventListener('DOMContentLoaded', async () => {
+            console.log('⏱️ Running baseline endpoint tests...');
+            await testBackendConnection();
+            
+            console.log('⏱️ Running SQL repository tests...');
+            await testSqlRepositories();
+            
+            console.log('⏱️ Scanning for available patients...');
+            await findAllAvailablePatients();
         });
 
         // Utility function for formatting dates
@@ -95,6 +163,64 @@
             if (!dateString) return '';
             const date = new Date(dateString);
             return date.toLocaleDateString();
+        };
+        
+        // Data source badge component
+        const DataSourceBadge = ({ source }) => {
+            let badge = "";
+            let tooltip = "";
+            let display = "";
+            
+            switch(source) {
+                case 'api':
+                    badge = "success";
+                    tooltip = "Data comes directly from the API";
+                    display = "API";
+                    break;
+                case 'api-demographics':
+                    badge = "success";
+                    tooltip = "Data comes from Demographics API endpoint";
+                    display = "API (Demographics)";
+                    break;
+                case 'api-addendum':
+                    badge = "info";
+                    tooltip = "Data comes from Addendum API endpoint";
+                    display = "API (Addendum)";
+                    break;
+                case 'api-other':
+                    badge = "info";
+                    tooltip = "Data comes from other API endpoints";
+                    display = "API (Other)";
+                    break;
+                case 'hybrid':
+                    badge = "warning";
+                    tooltip = "Data comes from a mix of API and mock sources";
+                    display = "Hybrid";
+                    break;
+                case 'mock':
+                    badge = "secondary";
+                    tooltip = "Data is mocked for demonstration purposes";
+                    display = "Mock";
+                    break;
+                case 'loading':
+                    badge = "info";
+                    tooltip = "Loading data...";
+                    display = "Loading...";
+                    break;
+                default:
+                    badge = "danger";
+                    tooltip = "Unknown data source";
+                    display = source;
+            }
+            
+            return (
+                <span className={`badge bg-${badge} ms-2`} 
+                      title={tooltip} 
+                      data-bs-toggle="tooltip" 
+                      data-bs-placement="top">
+                    {display}
+                </span>
+            );
         };
 
         // Context for global state management
@@ -113,85 +239,120 @@
             const fetchPatients = async () => {
                 setLoading(true);
                 try {
-                    // Based on API tests, we know /Demographics returns 405 Method Not Allowed
-                    // Let's try to fetch individual patients via their Addendum info
-                    console.log('Attempting to fetch patient data from available endpoints...');
+                    console.log('Attempting to fetch all patients using all available means...');
                     
-                    // Try to get patients from multiple known sources
-                    let patientData = null;
+                    // Use our more comprehensive patient scanning endpoint
+                    const response = await fetch('/list-all-patients');
+                    const result = await response.json();
                     
-                    // First try the William Saffire patient (ID 1001)
-                    try {
-                        const demoResponse = await api.get('/Demographics/1001');
-                        console.log('William Saffire demographics response:', demoResponse);
-                        if (demoResponse.status === 200 && demoResponse.data) {
-                            patientData = demoResponse.data;
-                        }
-                    } catch (demoErr) {
-                        console.warn('Could not fetch William Saffire demographics:', demoErr.message);
+                    let patientIds = [];
+                    
+                    if (result.success && result.patientSamples && result.patientSamples.length > 0) {
+                        // Filter to patients that actually have data
+                        const validPatients = result.patientSamples.filter(p => p.exists);
+                        console.log(`Found ${validPatients.length} potential patient IDs`);
+                        
+                        // Sort by known patients first, then those with actual data
+                        patientIds = validPatients
+                            .sort((a, b) => {
+                                // Sort known patients first
+                                if (a.known && !b.known) return -1;
+                                if (!a.known && b.known) return 1;
+                                
+                                // Then sort those with data first
+                                if (a.hasData && !b.hasData) return -1;
+                                if (!a.hasData && b.hasData) return 1;
+                                
+                                // Then sort by ID
+                                return a.patientId - b.patientId;
+                            })
+                            .map(p => p.patientId);
                     }
                     
-                    // If William Saffire didn't work, try Bobo the Clown via Addendum
-                    if (!patientData) {
+                    console.log(`Patient IDs to fetch: ${patientIds.join(', ')}`);
+                    
+                    // If we don't have any patient IDs, add the known ones
+                    if (patientIds.length === 0) {
+                        patientIds = [1001, 1033]; // William Saffire and Bobo the Clown
+                    }
+                    
+                    // Fetch details for each patient
+                    const apiPatients = [];
+                    
+                    // Limit the number of patients we fetch (first 13 maximum)
+                    const patientIdsToFetch = patientIds.slice(0, 13);
+                    
+                    for (const patientId of patientIdsToFetch) {
                         try {
-                            const addendumResponse = await api.get('/Addendum/1');
-                            console.log('Addendum response:', addendumResponse);
+                            // Use our enhanced endpoint to get complete patient data
+                            const detailResponse = await fetch(`/test-patient-demographics/${patientId}`);
+                            const detailResult = await detailResponse.json();
                             
-                            // Extract patient information from the Addendum
-                            const patData = addendumResponse.data;
-                            if (patData && patData.patID) {
-                                // We found at least one patient - create a demo set based on this info
-                                const patientName = patData.patientName || '';
-                                const nameParts = patientName.split(', ');
-                                const last = nameParts[0] || '';
-                                const first = nameParts.length > 1 ? nameParts[1].split(' ')[0] : '';
+                            if (detailResult.success && detailResult.result && detailResult.result.data) {
+                                const patientInfo = detailResult.result.data;
                                 
-                                // Extract DOB if present in the string
-                                const dobMatch = patientName.match(/DOB: (\d+\/\d+\/\d+)/);
-                                const birthDate = dobMatch ? new Date(dobMatch[1]) : new Date('1956-01-12');
-                                
-                                // Create patient from Addendum data
-                                patientData = {
-                                    PatientID: patData.patID,
-                                    First: first,
-                                    Last: last,
-                                    BirthDate: birthDate.toISOString(),
-                                    Gender: 'U', // Unknown since not provided
-                                    ChartID: `PT${patData.patID}`,
-                                    // Add the Addendum data for context
-                                    AddendumNote: patData.noteBody,
-                                    AddendumDate: patData.date
+                                // Create standardized patient object
+                                const patient = {
+                                    PatientID: parseInt(patientId),
+                                    First: patientInfo.firstName || `Patient`,
+                                    Last: patientInfo.lastName || `${patientId}`,
+                                    BirthDate: patientInfo.birthDate || new Date().toISOString(),
+                                    Gender: patientInfo.gender || 'U',
+                                    ChartID: patientInfo.chartId || `PT${patientId}`,
+                                    Source: patientInfo.source,
+                                    Attempts: detailResult.result.attempts
                                 };
+                                
+                                // Add source-specific data
+                                if (patientInfo.source === 'Addendum') {
+                                    patient.AddendumNote = patientInfo.addendumNote;
+                                    patient.AddendumDate = patientInfo.addendumDate;
+                                }
+                                
+                                // Add raw data if available
+                                if (patientInfo.rawData) {
+                                    patient.RawData = patientInfo.rawData;
+                                }
+                                
+                                apiPatients.push(patient);
+                                console.log(`Successfully fetched patient ${patientId} from ${patientInfo.source}`);
                             }
-                        } catch (addErr) {
-                            console.warn('Could not fetch Addendum data:', addErr.message);
+                        } catch (error) {
+                            console.warn(`Error fetching patient ${patientId}:`, error.message);
                         }
                     }
                     
-                    // If we found a patient through either method
-                    if (patientData) {
-                        // Create a patient object for our system
-                        const patient = {
-                            PatientID: patientData.PatientID || patientData.patID,
-                            First: patientData.First || patientData.first || '',
-                            Last: patientData.Last || patientData.last || '',
-                            BirthDate: patientData.BirthDate || patientData.birthDate || new Date().toISOString(),
-                            Gender: patientData.Gender || patientData.gender || 'U',
-                            ChartID: patientData.ChartID || `PT${patientData.PatientID || patientData.patID}`,
-                            // Keep any extra data we received
-                            ...patientData
-                        };
+                    // If we have at least one API patient
+                    if (apiPatients.length > 0) {
+                        console.log(`Fetched ${apiPatients.length} patients from API`);
                         
-                        // Set the first patient and use mock data for others
-                        const mockPatients = generateMockPatients();
-                        // Replace the first mock patient with our real patient data
-                        mockPatients[0] = patient;
+                        // Fill in the rest with mock data if needed
+                        if (apiPatients.length < 5) {
+                            console.log('Adding mock patients to supplement API data');
+                            const mockPatients = generateMockPatients();
+                            
+                            // Add mock patients until we have at least 13
+                            for (let i = 0; i < mockPatients.length && apiPatients.length < 13; i++) {
+                                // Ensure we're not adding duplicates
+                                const mockPatientId = mockPatients[i].PatientID;
+                                if (!apiPatients.some(p => p.PatientID === mockPatientId)) {
+                                    // Mark as mock data
+                                    mockPatients[i].Source = 'mock';
+                                    apiPatients.push(mockPatients[i]);
+                                }
+                            }
+                            
+                            setDataSource('hybrid');
+                        } else {
+                            setDataSource('api');
+                        }
                         
-                        setPatients(mockPatients);
-                        setDataSource('hybrid'); // Part real, part mock
+                        setPatients(apiPatients);
                         setError(null);
                     } else {
-                        throw new Error('No patient data found in Addendum');
+                        // If no patients found from API, fall back to mock data
+                        console.log('No patients found from API, falling back to mock data');
+                        throw new Error('No patients found from API endpoints');
                     }
                 } catch (err) {
                     console.error('Error fetching patients:', err);
@@ -239,49 +400,47 @@
                 try {
                     console.log(`Attempting to fetch details for patient ${patientId}...`);
                     
-                    // Based on test results, Demographics/{id} returns 204 No Content
-                    // Let's try to fetch an Addendum for this patient instead
+                    // Use our improved endpoint that tries multiple sources
                     let patientData = null;
                     let source = 'mock';
                     
                     try {
-                        // First try to get Demographics - it returns 204 No Content
-                        const demoResponse = await api.get(`/Demographics/${patientId}`);
-                        console.log('Demographics response:', demoResponse);
+                        // Use our enhanced server-side endpoint to get comprehensive patient data
+                        const response = await fetch(`/test-patient-demographics/${patientId}`);
+                        const result = await response.json();
                         
-                        // Since we might not get data, also try to get their Addendum
-                        const addendumResponse = await api.get(`/Addendum/1`); // We know this one works
-                        console.log('Addendum response for patient details:', addendumResponse);
+                        console.log('Patient details response:', result);
                         
-                        if (addendumResponse.data && addendumResponse.data.patID === patientId) {
-                            // We found an Addendum for this patient - use that data
-                            const patData = addendumResponse.data;
-                            const patientName = patData.patientName || '';
-                            const nameParts = patientName.split(', ');
-                            const last = nameParts[0] || '';
-                            const first = nameParts.length > 1 ? nameParts[1].split(' ')[0] : '';
+                        if (result.success && result.result && result.result.data) {
+                            const patientInfo = result.result.data;
                             
-                            // Extract DOB if present in the string
-                            const dobMatch = patientName.match(/DOB: (\d+\/\d+\/\d+)/);
-                            const birthDate = dobMatch ? new Date(dobMatch[1]) : new Date('1956-01-12');
-                            
-                            // Enhance patient data with Addendum info
+                            // Create standardized patient object based on available data
                             patientData = {
-                                PatientID: patData.patID,
-                                First: first,
-                                Last: last,
-                                BirthDate: birthDate.toISOString(),
-                                Gender: 'U', // Unknown since not provided
-                                ChartID: `PT${patData.patID}`,
+                                PatientID: parseInt(patientId),
+                                First: patientInfo.firstName || '',
+                                Last: patientInfo.lastName || '',
+                                BirthDate: patientInfo.birthDate || new Date().toISOString(),
+                                Gender: patientInfo.gender || 'U',
+                                ChartID: patientInfo.chartId || `PT${patientId}`,
                                 
-                                // Additional info from Addendum
-                                AddendumNote: patData.noteBody,
-                                AddendumDate: patData.date,
-                                AddendumType: patData.noteType,
-                                AddendumSubject: patData.noteSubject,
-                                SavedBy: patData.savedBy
+                                // Store endpoint test attempts for debugging
+                                Attempts: result.result.attempts,
+                                
+                                // Include source-specific data
+                                Source: patientInfo.source,
+                                RawData: patientInfo.rawData || null
                             };
-                            source = 'hybrid'; // Part API, part derived
+                            
+                            // Add source-specific data 
+                            if (patientInfo.source === 'Addendum') {
+                                patientData.AddendumNote = patientInfo.addendumNote;
+                                patientData.AddendumDate = patientInfo.addendumDate;
+                                source = 'api-addendum';
+                            } else if (patientInfo.source === 'Demographics') {
+                                source = 'api-demographics';
+                            } else {
+                                source = 'api-other';
+                            }
                         }
                     } catch (err) {
                         console.warn('Error fetching from API for patient details:', err.message);
@@ -289,7 +448,7 @@
                     
                     if (!patientData) {
                         // If API didn't work, use the patient from the list
-                        patientData = patients.find(p => p.PatientID === patientId);
+                        patientData = patients.find(p => p.PatientID === parseInt(patientId));
                         source = 'mock';
                     }
                     
@@ -406,17 +565,7 @@
                         </a>
                         {dataSource && (
                             <div className="data-source-indicator me-3">
-                                <span className={`badge ${
-                                    dataSource === 'api' ? 'bg-success' : 
-                                    dataSource === 'hybrid' ? 'bg-info text-white' :
-                                    dataSource === 'mock' ? 'bg-warning text-dark' : 
-                                    'bg-secondary'
-                                }`}>
-                                    {dataSource === 'api' ? 'Live API Data' : 
-                                     dataSource === 'hybrid' ? 'Hybrid Data (API + Mock)' :
-                                     dataSource === 'mock' ? 'Mock Data' : 
-                                     'Loading...'}
-                                </span>
+                                <DataSourceBadge source={dataSource} />
                             </div>
                         )}
                         <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -707,7 +856,16 @@
                                                 <i className="bi bi-person fs-3"></i>
                                             </div>
                                             <div>
-                                                <h5 className="card-title mb-0">{patient.First} {patient.Last}</h5>
+                                                <h5 className="card-title mb-0">
+                                                    {patient.First} {patient.Last}
+                                                    {patient.Source && (
+                                                        <small className="ms-2">
+                                                            <span className={`badge ${patient.Source === 'mock' ? 'bg-secondary' : 'bg-info'}`}>
+                                                                {patient.Source}
+                                                            </span>
+                                                        </small>
+                                                    )}
+                                                </h5>
                                                 <p className="card-text text-muted mb-0">Chart: {patient.ChartID}</p>
                                             </div>
                                         </div>
@@ -784,8 +942,13 @@
                                     </div>
                                     <h4>{selectedPatient.First} {selectedPatient.Last}</h4>
                                     <p className="text-muted">Chart ID: {selectedPatient.ChartID}</p>
-                                    {dataSource === 'hybrid' && (
-                                        <span className="badge bg-info mt-2">Data from API</span>
+                                    <div className="mt-2">
+                                        <DataSourceBadge source={dataSource} />
+                                    </div>
+                                    {selectedPatient.Source && (
+                                        <div className="mt-1">
+                                            <span className="badge bg-light text-dark">Source: {selectedPatient.Source}</span>
+                                        </div>
                                     )}
                                 </div>
                                 <div className="col-md-9">
@@ -1371,6 +1534,257 @@
             );
         };
 
+        // API Testing Tools Component
+        const ApiTestingTools = () => {
+            const [testResults, setTestResults] = React.useState(null);
+            const [loading, setLoading] = React.useState(false);
+            const [endpoint, setEndpoint] = React.useState("");
+            const [patientId, setPatientId] = React.useState("");
+            
+            // Helper function to safely parse JSON
+            const safeJsonParse = async (response) => {
+                try {
+                    // First check if the response is valid
+                    if (!response.ok) {
+                        return {
+                            error: true,
+                            status: response.status,
+                            statusText: response.statusText,
+                            message: `Server returned ${response.status}: ${response.statusText}`
+                        };
+                    }
+                    
+                    // Try to parse as JSON
+                    const text = await response.text();
+                    try {
+                        return JSON.parse(text);
+                    } catch (jsonError) {
+                        return {
+                            error: true,
+                            status: response.status,
+                            message: 'Invalid JSON response',
+                            responseText: text.substring(0, 500) + (text.length > 500 ? '...' : '')
+                        };
+                    }
+                } catch (error) {
+                    return {
+                        error: true,
+                        message: `Error processing response: ${error.message}`
+                    };
+                }
+            };
+            
+            const runEndpointTest = async () => {
+                setLoading(true);
+                try {
+                    const response = await fetch('/test-available-endpoints');
+                    const data = await safeJsonParse(response);
+                    setTestResults(data);
+                } catch (error) {
+                    console.error('Error running endpoint test:', error);
+                    setTestResults({
+                        error: true,
+                        message: `Network error: ${error.message}`
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const findAllPatients = async () => {
+                setLoading(true);
+                try {
+                    const response = await fetch('/list-all-patients');
+                    const data = await safeJsonParse(response);
+                    setTestResults(data);
+                } catch (error) {
+                    console.error('Error finding all patients:', error);
+                    setTestResults({
+                        error: true,
+                        message: `Network error: ${error.message}`
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const testSqlRepos = async () => {
+                setLoading(true);
+                try {
+                    const response = await fetch('/sql-repositories');
+                    const data = await safeJsonParse(response);
+                    setTestResults(data);
+                } catch (error) {
+                    console.error('Error testing SQL repositories:', error);
+                    setTestResults({
+                        error: true,
+                        message: `Network error: ${error.message}`
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const testCustomEndpoint = async () => {
+                if (!endpoint) {
+                    alert('Please enter an endpoint to test');
+                    return;
+                }
+                
+                setLoading(true);
+                try {
+                    let url = `/test-endpoint/${endpoint}`;
+                    if (patientId) {
+                        url += `/${patientId}`;
+                    }
+                    
+                    const response = await fetch(url);
+                    const data = await safeJsonParse(response);
+                    setTestResults(data);
+                } catch (error) {
+                    console.error('Error testing custom endpoint:', error);
+                    setTestResults({
+                        error: true,
+                        message: `Network error: ${error.message}`
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const testPatientDemographics = async () => {
+                if (!patientId) {
+                    alert('Please enter a patient ID');
+                    return;
+                }
+                
+                setLoading(true);
+                try {
+                    const response = await fetch(`/test-patient-demographics/${patientId}`);
+                    const data = await safeJsonParse(response);
+                    setTestResults(data);
+                } catch (error) {
+                    console.error('Error testing patient demographics:', error);
+                    setTestResults({
+                        error: true,
+                        message: `Network error: ${error.message}`
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            return (
+                <div className="p-4">
+                    <h2 className="mb-4">API Testing Tools</h2>
+                    
+                    <div className="row mb-4">
+                        <div className="col">
+                            <div className="card">
+                                <div className="card-header">Quick Tests</div>
+                                <div className="card-body">
+                                    <div className="d-grid gap-2">
+                                        <button 
+                                            className="btn btn-primary" 
+                                            onClick={runEndpointTest}
+                                            disabled={loading}
+                                        >
+                                            Test Available Endpoints
+                                        </button>
+                                        <button 
+                                            className="btn btn-primary" 
+                                            onClick={findAllPatients}
+                                            disabled={loading}
+                                        >
+                                            Find All Patients
+                                        </button>
+                                        <button 
+                                            className="btn btn-primary" 
+                                            onClick={testSqlRepos}
+                                            disabled={loading}
+                                        >
+                                            Test SQL Repositories
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="col">
+                            <div className="card">
+                                <div className="card-header">Custom Endpoint Test</div>
+                                <div className="card-body">
+                                    <div className="mb-3">
+                                        <label className="form-label">Endpoint (e.g. "Demographics")</label>
+                                        <input 
+                                            type="text" 
+                                            className="form-control" 
+                                            value={endpoint}
+                                            onChange={(e) => setEndpoint(e.target.value)}
+                                            placeholder="Enter endpoint name"
+                                        />
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="form-label">Patient ID (optional)</label>
+                                        <input 
+                                            type="text" 
+                                            className="form-control" 
+                                            value={patientId}
+                                            onChange={(e) => setPatientId(e.target.value)}
+                                            placeholder="Enter patient ID (optional)"
+                                        />
+                                    </div>
+                                    <div className="d-grid gap-2">
+                                        <button 
+                                            className="btn btn-primary" 
+                                            onClick={testCustomEndpoint}
+                                            disabled={loading}
+                                        >
+                                            Test Custom Endpoint
+                                        </button>
+                                        <button 
+                                            className="btn btn-info" 
+                                            onClick={testPatientDemographics}
+                                            disabled={loading || !patientId}
+                                        >
+                                            Test Patient Demographics
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {loading && (
+                        <div className="text-center my-4">
+                            <div className="spinner-border text-primary" role="status">
+                                <span className="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {testResults && (
+                        <div className="card">
+                            <div className="card-header d-flex justify-content-between align-items-center">
+                                <span>Test Results</span>
+                                <button 
+                                    className="btn btn-sm btn-outline-secondary"
+                                    onClick={() => setTestResults(null)}
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                            <div className="card-body">
+                                <pre style={{maxHeight: '400px', overflow: 'auto'}}>
+                                    {JSON.stringify(testResults, null, 2)}
+                                </pre>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         // App Component
         const App = () => {
             const { view, activeModule } = useAppContext();
@@ -1395,6 +1809,8 @@
                         default:
                             return <PatientSummary />;
                     }
+                } else if (view === 'api-testing') {
+                    return <ApiTestingTools />;
                 }
             };
             
