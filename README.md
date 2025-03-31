@@ -1,12 +1,13 @@
 # Legacy EHR to FHIR Mapping Project (`azure-fhir`)
 
-This repository contains components for a project focused on mapping data from existing Amazing Charts legacy EHR system to the FHIR R4 standard.
+This repository contains components for a project focused on mapping data from existing Amazing Charts legacy EHR system to the FHIR R4 standard. The azure endpoint is at: https://apiserviceswin20250318.azurewebsites.net/api/
 
 It includes:
 
 1.  **C# FHIR Mappers (`FHIRMappers/`):** The core C# logic for transforming legacy data models into FHIR resources.
-2.  **Node.js Backend/Proxy Server (`server.js`):** Acts as an API gateway/proxy to the real legacy API. It also serves a simple HTML-based EHR interface ([index.html](./index.html)) and provides helper endpoints (e.g., `/mapping-status`) used by the React UI.
-3.  **React Frontend UI (`fhir-mapper-ui/`):** A more comprehensive Vite-based React application that serves as a **development and visualization tool** for the C# mapping process. It interacts with the Node.js backend.
+2.  **Mapping Discovery System (`FHIRMappers/Discovery/`):** Automated tools for discovering, configuring, and generating FHIR mappings from legacy data models.
+3.  **Node.js Backend/Proxy Server (`server.js`):** Acts as an API gateway/proxy to the real legacy API. It also serves a simple HTML-based EHR interface ([index.html](./index.html)) and provides helper endpoints (e.g., `/mapping-status`) used by the React UI.
+4.  **React Frontend UI (`fhir-mapper-ui/`):** A more comprehensive Vite-based React application that serves as a **development and visualization tool** for the C# mapping process. It interacts with the Node.js backend.
 
 **IMPORTANT:** The Node.js server and both UIs are primarily **tools to aid development** of the C# mappers. They are **not** intended as a production EHR system or interface.
 
@@ -77,6 +78,32 @@ To facilitate the development of the C# mappers, this repository includes a Node
     npm run dev
     ```
     (Runs the React development UI, typically on port 5173. It makes calls to the backend server running on port 3000)
+
+### 3. Mapping Discovery Tool
+
+*   **Purpose:**
+    *   Automates the discovery of potential mappings between legacy data models and FHIR resources.
+    *   Generates mapping configurations based on user-selected mappings.
+    *   Previews FHIR resources using the generated configurations.
+    *   Generates C# mapper classes that can be integrated into the application.
+*   **Key Features:**
+    *   **Analyze Legacy Data:** Upload or generate sample legacy data and analyze it for potential FHIR mappings.
+    *   **Interactive Mapping Selection:** Review and select appropriate mappings from the discovered options.
+    *   **Configuration Generation:** Automatically generate mapping configurations based on selected mappings.
+    *   **FHIR Preview:** Preview the resulting FHIR resource using the generated configuration.
+    *   **C# Mapper Generation:** Generate a C# mapper class that can be used in the application.
+*   **Technology:** 
+    *   **Frontend:** React components in the `fhir-mapper-ui/src/views/MappingDiscoveryView.jsx`
+    *   **Backend:** Node.js controller in `controllers/mappingDiscoveryController.js`
+    *   **Azure API:** Integration with Azure backend API for mapping analysis and generation
+*   **Usage:**
+    1. Navigate to the "Mapping Discovery" page in the React UI.
+    2. Select a FHIR resource type from the dropdown.
+    3. Either generate sample data or enter your own legacy data in JSON format.
+    4. Click "Analyze" to discover potential mappings.
+    5. Review and select the appropriate mappings for each FHIR field.
+    6. Generate the mapping configuration and preview the resulting FHIR resource.
+    7. Generate a C# mapper class that can be integrated into the application.
 
 ## Getting Started (Full Stack)
 
@@ -151,6 +178,7 @@ This script also attempts to automatically set the required Node.js version (cur
 
 ## Configuration Notes
 
-*   **Backend (`server.js`):** Legacy API URL and proxy settings are configured here.
+*   **Backend (`server.js`):** Legacy API URL and proxy settings are configured here. The server acts as a proxy to the Azure API at `https://apiserviceswin20250318.azurewebsites.net/api`.
 *   **Frontend (`fhir-mapper-ui/vite.config.js`):** Configures the proxy target (must match the backend server's address/port).
 *   **Frontend (`fhir-mapper-ui/src/context/AppContext.jsx`):** Manages global state and API interaction logic for the UI.
+*   **Mapping Discovery Controller (`controllers/mappingDiscoveryController.js`):** Handles requests for the Mapping Discovery tool and forwards them to the Azure API.

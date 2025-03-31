@@ -21,6 +21,12 @@ app.get('/health', (req, res) => {
 // Define API routes first (before static file serving)
 // This ensures our API endpoints get priority
 
+// Import the mapping discovery controller
+const mappingDiscoveryController = require('./controllers/mappingDiscoveryController');
+
+// Use the mapping discovery controller for /api/mapping-discovery routes
+app.use('/api/mapping-discovery', mappingDiscoveryController);
+
 // Debug endpoint to test direct connection to Azure API
 app.get('/test-api-connection', async (req, res) => {
   try {

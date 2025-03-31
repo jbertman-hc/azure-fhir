@@ -33,6 +33,11 @@ const Header = () => {
                                 <i className="bi bi-table me-1"></i> Mapping Status
                             </a>
                         </li>
+                        <li className="nav-item">
+                            <a className={`nav-link ${view === 'mappingDiscovery' ? 'active' : ''}`} href="#" onClick={() => setView('mappingDiscovery')}>
+                                <i className="bi bi-magic me-1"></i> Mapping Discovery
+                            </a>
+                        </li>
                         {/* Removed Patient links, kept API testing for now */}
                         {selectedPatient && (
                             <li className="nav-item">

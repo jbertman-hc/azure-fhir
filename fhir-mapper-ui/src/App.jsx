@@ -7,6 +7,7 @@ import MappingStatusView from './views/MappingStatusView';
 import ApiTestingTools from './views/ApiTestingTools';
 import LoadingWithLog from './components/LoadingWithLog'; // Import the loader
 import ApiExplorer from './views/ApiExplorer'; // Import the new view
+import MappingDiscoveryView from './views/MappingDiscoveryView'; // Import the mapping discovery view
 
 const MainContent = () => {
     const { view, loading, error, selectedPatient, activeModule } = useAppContext();
@@ -34,6 +35,8 @@ const MainContent = () => {
                 return <ApiTestingTools />;
             case 'apiExplorer': // Add case for ApiExplorer
                 return <ApiExplorer />;
+            case 'mappingDiscovery': // Add case for MappingDiscoveryView
+                return <MappingDiscoveryView />;
             case 'patient-detail':
                 if (!selectedPatient) {
                     return <div className="alert alert-warning m-4">No patient selected. Go back to API Testing.</div>;
