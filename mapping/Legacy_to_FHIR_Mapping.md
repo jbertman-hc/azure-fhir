@@ -70,6 +70,14 @@ The following table outlines the primary entity-to-FHIR resource mappings:
 | BillingCPTs | Claim/ChargeItem | Billing information | High |
 | ListPayors | Coverage | Insurance information | High |
 | PatientCharges | Invoice | Patient billing | High |
+| AssociatedParties | RelatedPerson | Patient contacts/guarantors | Medium |
+| ListInjections | Immunization | Vaccines and injections | Medium |
+| Locations | Location | Care delivery locations | Medium |
+| Renewals | CarePlan | Care planning and renewals | Medium |
+| Orders | ServiceRequest | Clinical orders | Medium |
+| LabResults | DiagnosticReport | Diagnostic reports | Medium |
+| VaccineLotNumbers | Device | Medical devices/supplies | Low |
+| ListMessagedProvider | Communication | Provider communications | Low |
 
 ## Detailed Field Mappings
 
@@ -322,6 +330,141 @@ The following table outlines the primary entity-to-FHIR resource mappings:
 | RelationshipToSubscriber | Coverage.relationship | CodeableConcept | No | Map to http://terminology.hl7.org/CodeSystem/subscriber-relationship |
 | CoverageType | Coverage.type | CodeableConcept | No | |
 | Priority | Coverage.order | positiveInt | No | |
+
+### RelatedPerson Resource (from AssociatedParties)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| AssociatedPartiesID | RelatedPerson.identifier[0].value | string | Yes | |
+| PatientID | RelatedPerson.patient | Reference(Patient) | Yes | Reference to the associated patient |
+| FirstName | RelatedPerson.name[0].given[0] | string | Yes | |
+| MiddleInitial | RelatedPerson.name[0].given[1] | string | No | |
+| LastName | RelatedPerson.name[0].family | string | Yes | |
+| Gender | RelatedPerson.gender | code | No | Map "M" → "male", "F" → "female" |
+| DOB | RelatedPerson.birthDate | date | No | |
+| SAGAddress1 | RelatedPerson.address[0].line[0] | string | No | |
+| SAGAddress2 | RelatedPerson.address[0].line[1] | string | No | |
+| City | RelatedPerson.address[0].city | string | No | |
+| StateOrRegion | RelatedPerson.address[0].state | string | No | |
+| PostalCode | RelatedPerson.address[0].postalCode | string | No | |
+| Country | RelatedPerson.address[0].country | string | No | |
+| PhoneNumber | RelatedPerson.telecom[0].value | string | No | system=phone |
+| Email | RelatedPerson.telecom[1].value | string | No | system=email |
+| Relationship | RelatedPerson.relationship | CodeableConcept | Yes | Map to http://terminology.hl7.org/CodeSystem/v3-RoleCode |
+| SSN | RelatedPerson.identifier[1].value | string | No | Use system "http://hl7.org/fhir/sid/us-ssn" |
+| Notes | RelatedPerson.communication[0].text | string | No | |
+| IsNonPersonEntity | RelatedPerson.active | boolean | No | Set to false if IsNonPersonEntity is true |
+
+### Immunization Resource (from ListInjections)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| InjectionID | Immunization.identifier[0].value | string | Yes | |
+| PatientID | Immunization.patient | Reference(Patient) | Yes | |
+| InjectionName | Immunization.vaccineCode.text | string | Yes | |
+| LotNo | Immunization.lotNumber | string | No | |
+| DateGiven | Immunization.occurrenceDateTime | dateTime | Yes | |
+| RecordedBy | Immunization.performer[0].actor | Reference(Practitioner) | No | |
+| Volume | Immunization.doseQuantity.value | decimal | No | |
+| Route | Immunization.route | CodeableConcept | No | Map to http://terminology.hl7.org/CodeSystem/v3-RouteOfAdministration |
+| Site | Immunization.site | CodeableConcept | No | Map to http://terminology.hl7.org/CodeSystem/v3-ActSite |
+| Manufacturer | Immunization.manufacturer.display | string | No | |
+| Expiration | Immunization.expirationDate | date | No | |
+| Comment | Immunization.note[0].text | string | No | |
+| IsGivenElsewhere | Immunization.reportOrigin | CodeableConcept | No | Set if IsGivenElsewhere is true |
+| Deleted | Immunization.status | code | Yes | Map to "entered-in-error" if Deleted is true, otherwise "completed" |
+| NDCCode | Immunization.vaccineCode.coding[0].code | string | No | Use system "http://hl7.org/fhir/sid/ndc" |
+
+### Location Resource (from Locations)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| LocationsID | Location.identifier[0].value | string | Yes | |
+| Locations | Location.name | string | Yes | |
+| Address1 | Location.address.line[0] | string | No | |
+| Address2 | Location.address.line[1] | string | No | |
+| City | Location.address.city | string | No | |
+| StateOrRegion | Location.address.state | string | No | |
+| PostalCode | Location.address.postalCode | string | No | |
+| Country | Location.address.country | string | No | |
+| IsDefault | Location.status | code | Yes | Map to "active" if IsDefault is true |
+| Type | Location.type | CodeableConcept | No | Map to http://terminology.hl7.org/CodeSystem/v3-RoleCode |
+| ManagingOrganization | Location.managingOrganization | Reference(Organization) | No | Reference to the managing organization |
+
+### CarePlan Resource (from Renewals)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| RenewalID | CarePlan.identifier[0].value | string | Yes | |
+| PatientID | CarePlan.subject | Reference(Patient) | Yes | |
+| ProviderID | CarePlan.author | Reference(Practitioner) | No | |
+| DateRequested | CarePlan.created | dateTime | Yes | |
+| Status | CarePlan.status | code | Yes | Map to appropriate FHIR status codes |
+| MedicationID | CarePlan.activity[0].reference | Reference(MedicationRequest) | No | |
+| Instructions | CarePlan.activity[0].detail.description | string | No | |
+| Comments | CarePlan.note[0].text | string | No | |
+| DateCompleted | CarePlan.period.end | dateTime | No | |
+| Category | CarePlan.category[0] | CodeableConcept | No | Set to "medication" for medication renewals |
+
+### ServiceRequest Resource (from Orders)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| OrderID | ServiceRequest.identifier[0].value | string | Yes | |
+| PatientID | ServiceRequest.subject | Reference(Patient) | Yes | |
+| OrderingProviderID | ServiceRequest.requester | Reference(Practitioner) | No | |
+| OrderDate | ServiceRequest.authoredOn | dateTime | Yes | |
+| OrderType | ServiceRequest.category[0] | CodeableConcept | No | Map to appropriate order type |
+| OrderStatus | ServiceRequest.status | code | Yes | Map to FHIR request status codes |
+| OrderDetails | ServiceRequest.code | CodeableConcept | Yes | |
+| Reason | ServiceRequest.reasonCode[0] | CodeableConcept | No | |
+| Instructions | ServiceRequest.patientInstruction | string | No | |
+| Priority | ServiceRequest.priority | code | No | Map to FHIR request priority codes |
+| FacilityID | ServiceRequest.locationReference | Reference(Location) | No | |
+
+### DiagnosticReport Resource (from LabResults)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| ResultID | DiagnosticReport.identifier[0].value | string | Yes | |
+| PatientID | DiagnosticReport.subject | Reference(Patient) | Yes | |
+| OrderingProviderID | DiagnosticReport.performer[0] | Reference(Practitioner) | No | |
+| ResultDate | DiagnosticReport.effectiveDateTime | dateTime | Yes | |
+| LabName | DiagnosticReport.performer[1] | Reference(Organization) | No | |
+| TestName | DiagnosticReport.code | CodeableConcept | Yes | |
+| TestStatus | DiagnosticReport.status | code | Yes | Map to FHIR diagnostic report status codes |
+| ResultValue | DiagnosticReport.result | Reference(Observation) | No | References to individual observations |
+| Interpretation | DiagnosticReport.conclusionCode[0] | CodeableConcept | No | |
+| Comments | DiagnosticReport.conclusion | string | No | |
+| ReportLink | DiagnosticReport.presentedForm[0].url | url | No | |
+
+### Device Resource (from VaccineLotNumbers)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| LotNumberID | Device.identifier[0].value | string | Yes | |
+| VaccineName | Device.type | CodeableConcept | Yes | |
+| LotNumber | Device.lotNumber | string | No | |
+| Manufacturer | Device.manufacturer | string | No | |
+| ExpirationDate | Device.expirationDate | date | No | |
+| NDCCode | Device.identifier[1].value | string | No | Use system "http://hl7.org/fhir/sid/ndc" |
+| Status | Device.status | code | Yes | Map to FHIR device status codes |
+| Location | Device.location | Reference(Location) | No | |
+
+### Communication Resource (from ListMessagedProvider)
+
+| Legacy Field | FHIR Path | Data Type | Required | Notes |
+|--------------|-----------|-----------|----------|-------|
+| MessageID | Communication.identifier[0].value | string | Yes | |
+| SenderID | Communication.sender | Reference(Practitioner) | No | |
+| RecipientID | Communication.recipient[0] | Reference(Practitioner) | No | |
+| PatientID | Communication.subject | Reference(Patient) | Yes | |
+| MessageDate | Communication.sent | dateTime | Yes | |
+| MessageContent | Communication.payload[0].contentString | string | No | |
+| MessageType | Communication.category[0] | CodeableConcept | No | |
+| MessageStatus | Communication.status | code | Yes | Map to FHIR communication status codes |
+| Priority | Communication.priority | code | No | Map to FHIR request priority codes |
+| RelatedEncounterID | Communication.encounter | Reference(Encounter) | No | |
 
 ## Terminology Mappings
 
