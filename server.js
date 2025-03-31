@@ -301,6 +301,9 @@ app.get('/sql-repositories', async (req, res) => {
 // Try to get a list of all patients from various potential endpoints
 app.get('/list-all-patients', async (req, res) => {
   try {
+    console.log(`[${new Date().toISOString()}] Received request for /list-all-patients`); 
+    console.log('  Request Headers:', req.headers); 
+    
     console.log('Attempting to list all patients from various endpoint sources...');
     
     // Endpoints that might return collections of patients
@@ -686,20 +689,28 @@ app.get('/mapping-status', async (req, res) => {
   console.log('[server.js] Received request for /mapping-status'); 
   const mappingDetails = {};
   let hasErrors = false;
+  let files = [];
 
   try {
     console.log(`[server.js] Attempting to read directory: ${mappersDir}`); 
-    if (!fs.existsSync(mappersDir)) {
-      console.warn(`[server.js] Warning: FHIRMappers directory not found at ${mappersDir}`); 
-      return res.status(404).json({ 
-        message: 'FHIRMappers directory not found',
-        error: `Directory not found: ${mappersDir}`,
-        mappingDetails: {} 
-      });
+    
+    // Try reading the directory. If it fails with ENOENT, the directory doesn't exist.
+    try {
+        files = await fs.readdir(mappersDir);
+        console.log(`[server.js] Found ${files.length} items in ${mappersDir}`);
+    } catch (dirReadError) {
+        if (dirReadError.code === 'ENOENT') {
+            console.warn(`[server.js] Warning: FHIRMappers directory not found at ${mappersDir}`); 
+            return res.status(404).json({ 
+                message: 'FHIRMappers directory not found',
+                error: `Directory not found: ${mappersDir}`,
+                mappingDetails: {} 
+            });
+        } else {
+            // Re-throw other errors to be caught by the outer try...catch
+            throw dirReadError;
+        }
     }
-
-    const files = await fs.readdir(mappersDir);
-    console.log(`[server.js] Found ${files.length} items in ${mappersDir}`); 
 
     for (const file of files) {
       const filePath = path.join(mappersDir, file);

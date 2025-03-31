@@ -1,173 +1,128 @@
-# Legacy EHR to FHIR Mapping Project
+# Legacy EHR to FHIR Mapping Project (`azure-fhir`)
 
-This repository contains tools and code focused on **mapping data from a legacy EHR system (accessed via SQL or an existing API) to the FHIR R4 standard**.
+This repository contains the components for a project focused on mapping data from a legacy EHR system to the FHIR R4 standard.
 
-## Primary Goal: FHIR Mapping
+It includes:
 
-The core objective is to develop and refine C# mappers (located in `FHIRMappers/`) that transform data from the source system into valid FHIR resources (Patient, Observation, Condition, etc.).
+1.  **C# FHIR Mappers (`FHIRMappers/`):** The core C# logic for transforming legacy data models into FHIR resources.
+2.  **Node.js Backend/Proxy Server (`server.js`):** Acts as an API gateway/proxy to the real legacy API. It also serves a simple HTML-based EHR interface ([index.html](./index.html)) and provides helper endpoints (e.g., `/mapping-status`) used by the React UI.
+3.  **React Frontend UI (`fhir-mapper-ui/`):** A more comprehensive Vite-based React application that serves as a **development and visualization tool** for the C# mapping process. It interacts with the Node.js backend.
 
-## Supporting Frontend Application
+**IMPORTANT:** The Node.js server and both UIs are primarily **tools to aid development** of the C# mappers. They are **not** intended as a production EHR system or interface.
 
-This project also includes a web-based frontend (`index.html` served by `server.js`) designed to **support the mapping effort**. Its key functions are:
+## Repository Structure
 
-*   **Data Exploration:** Allows connecting to the legacy system's API (`apiserviceswin20250318.azurewebsites.net/api/`) to view raw patient data, aiding in understanding the source schema.
-*   **Mapping Status Visualization:** Provides a dedicated view ("Mapping Status") to track the progress of the C# mappers, list identified resources, and highlight areas needing work (via `<<< FLAG: ... >>>` comments).
-*   **API Testing:** Includes tools to directly test API endpoints.
+```
+azure-fhir/
+├── FHIRMappers/         # Core C# FHIR mapping logic
+├── fhir-mapper-ui/      # React frontend application (Vite)
+│   ├── public/
+│   │   └── swagger.json # OpenAPI spec for legacy API
+│   ├── src/             # Frontend source code (components, views, context)
+│   ├── index.html
+│   ├── package.json     # Frontend dependencies
+│   └── vite.config.js   # Vite config (including proxy to backend)
+├── DataAccess/          # Supporting C# Data Access project
+├── Models/              # Supporting C# Models project
+├── server.js            # Node.js backend server
+├── package.json         # Backend dependencies
+└── README.md            # This file
+```
 
-**Note:** The frontend is a development tool, not a production EHR interface.
+## Core Goal: FHIR Mapping (`FHIRMappers/`)
 
-## Getting Started
+The primary objective is to develop and refine the C# classes within the `FHIRMappers/` directory. These mappers are responsible for converting data queried via `DataAccess/` (using `Models/`) into valid FHIR R4 resources.
+
+*   **Technology:** C#
+*   **Status:** Development is ongoing. Use the "Mapping Status" view in the frontend or examine `<<< FLAG: ... >>>` comments within the `.cs` files to identify areas needing work.
+*   **Building:** Build these C# projects using the .NET SDK.
+
+## Development Support Tools (Backend & Frontend UIs)
+
+To facilitate the development of the C# mappers, this repository includes a Node.js server (acting as backend/proxy) and two distinct frontend UIs.
+
+### 1. Node.js Backend (`server.js`)
+
+*   **Purpose:**
+    *   Acts as an API gateway/proxy to the real legacy API.
+    *   Serves a basic EHR-like interface via the root [index.html](./index.html) file.
+    *   Provides helper endpoints needed by the *React* frontend (e.g., `/mapping-status`).
+*   **Key Endpoints:**
+    *   `/api/*`: Proxies requests to the configured legacy API.
+    *   `/mapping-status`: Reads `FHIRMappers/`, analyzes `.cs` files for flags, returns JSON summary.
+    *   `/list-all-patients`: Retrieves patient IDs from the legacy backend.
+    *   Various `/test-*` endpoints for diagnostics.
+*   **Running:**
+    ```bash
+    # From the azure-fhir root directory
+    npm install  # Install backend dependencies
+    node server.js
+    ```
+    (Serves the `index.html` UI and backend API proxy, typically on port 3000)
+
+### 2. React Frontend (`fhir-mapper-ui/`)
+
+*   **Purpose:**
+    *   Visualizes data from the legacy API to aid understanding.
+    *   Displays the progress and status of C# mappers via the `/mapping-status` endpoint.
+    *   Provides an interactive API explorer based on `swagger.json`.
+    *   Offers tools to test legacy API endpoints directly (via the backend proxy).
+*   **Key Features:** Dashboard, API Explorer, Mapping Status view, API Testing tools.
+*   **Technology:** React, Vite, Bootstrap, Axios, Context API.
+*   **Running (Development):**
+    ```bash
+    # From the azure-fhir root directory
+    cd fhir-mapper-ui
+    npm install  # Install frontend dependencies
+    npm run dev
+    ```
+    (Runs the React development UI, typically on port 5173. It makes calls to the backend server running on port 3000)
+
+## Getting Started (Full Stack)
 
 ### Prerequisites
 
-*   Node.js (v14 or higher) & npm/yarn (for the frontend/server)
-*   .NET SDK (compatible with the C# projects in `DataAccess`, `Models`, `FHIRMappers` - *check project files for specific version*)
+*   **Node.js:** **v15.0.0 or higher** (for backend), compatible version for Vite (check `fhir-mapper-ui/package.json`, likely v16+).
+    *   _Note: As of this writing, **v20+** is required for `fhir-mapper-ui` dependencies._
+*   **npm**.
+*   **(Optional) .NET SDK:** Required only for building/modifying C# projects.
 
-### Installation (Frontend/Server)
+### Installation
 
-1.  Clone the repository.
-2.  Install Node.js dependencies:
+1.  Clone this repository (`azure-fhir`).
+2.  Install backend dependencies:
     ```bash
+    cd /path/to/azure-fhir
+    npm install
+    ```
+3.  Install frontend dependencies:
+    ```bash
+    cd fhir-mapper-ui
     npm install
     ```
 
-### Running the Frontend/Server
+### Running (Development)
 
-1.  **Start the Node.js Server:**
+1.  **Start the Backend Server & Basic UI:**
+    Open a terminal in the `azure-fhir` root directory:
     ```bash
-    cd /path/to/claude_ac_directsql # Navigate to the repo root
+    node server.js
+    ```
+    (Leave this running. Provides the backend proxy and serves the basic UI at http://localhost:3000).
+
+2.  **Start the React Development UI:**
+    Open *another* terminal in the `azure-fhir/fhir-mapper-ui` directory:
+    ```bash
     npm run dev
     ```
-    This starts the Express server (defaulting to port 3000) which serves the `index.html` frontend and provides supporting endpoints.
+    (Leave this running. Provides the React development UI, typically at http://localhost:5173).
 
-2.  **Access the Frontend Tool:**
-    Open your web browser and navigate to `http://localhost:3000`.
+3.  **Access the UIs:**
+    *   **Basic UI:** Open your web browser to the backend server's URL (e.g., `http://localhost:3000`).
+    *   **React Dev UI:** Open your web browser to the Vite dev server's URL (e.g., `http://localhost:5173`).
 
-## Using the Frontend Tool
+## Configuration Notes
 
-### Mapping Status View
-
-*   **Access:** Click "Mapping Status" in the sidebar.
-*   **Purpose:** This is the primary view for tracking the FHIR mapping work.
-*   **Features:**
-    *   Lists C# mapper files found in `FHIRMappers/`.
-    *   Shows the potential FHIR Resource target derived from the filename.
-    *   Sorts mappers by the number of `<<< FLAG: ... >>>` comments (most flags first) to prioritize review.
-    *   Displays all flags found within each mapper file.
-
-### Data Exploration (via Dashboard & API Testing)
-
-*   **Loading API Data:** The application *does not* load data automatically. Go to the **Dashboard** and click "Load Patient Data" to connect to the legacy API and fetch sample patient information.
-*   **Viewing Source Data:** Once loaded, you can browse patient lists and details to understand the data that needs mapping.
-*   **API Testing:** Use the "API Testing" section to interact with specific API endpoints directly.
-*   **Activity Log:** The log in the "API Testing" section shows the API calls made during data loading or testing.
-
-### Data Source Indicator
-
-A badge in the header shows the connection status to the legacy API (Not Connected, Live API Data, etc.) after attempting a manual load.
-
-## Key Components
-
-*   **`FHIRMappers/`:** Contains the core C# FHIR mapping logic (the primary focus).
-*   **`DataAccess/`, `Models/`:** Supporting C# projects for legacy data access patterns and models (potentially approximate).
-*   **`index.html`:** Frontend application built with React/Bootstrap (via CDN).
-*   **`server.js`:** Node.js/Express backend serving the frontend and providing helper endpoints (`/mapping-status`, API proxy, test endpoints).
-
-## FHIR Mapping Layer Details
-
-*   **Goal:** Transform data from the legacy system (represented by models in `Models/` and accessed via `DataAccess/`) into FHIR R4 resources.
-*   **Status:** Mappers are under development. Refer to the "Mapping Status" view in the frontend and the comments (`<<< FLAG: ... >>>`) within the `.cs` files for specific areas needing attention.
-*   **Detailed Docs:** Further details on the mapping approach and specific mapper status may be found in `mapping/README.md`.
-
-## Technical Stack (Frontend/Server)
-
--   React (via CDN), Bootstrap 5
--   Node.js, Express.js
--   `axios`, `http-proxy-middleware`
-
-## Features
-
-- Dashboard with summary statistics
-- Patient listing with search
-- Detailed patient views:
-  - Demographics
-  - Problems list
-  - Medications
-  - Allergies
-  - And more!
-
-## Frontend Behavior
-
-### Data Loading
-
-*   **Manual Load:** Unlike previous versions, the application **does not** automatically load patient data from the API upon startup. 
-*   **Trigger:** To load data, navigate to the **Dashboard** and click the "Load Patient Data" button.
-*   **Process:** Clicking the button initiates the following sequence:
-    1.  **Health Check:** Sends a request to `/health` to verify server reachability.
-    2.  **List Patient IDs:** Calls `/list-all-patients` to get a list of potential patient IDs from various backend sources.
-    3.  **Fetch Patient Details:** Calls `/test-patient-demographics/:id` for each unique ID (up to a limit) to retrieve detailed data.
-*   **Status:** Loading progress and any errors encountered during this process are displayed on the Dashboard.
-
-### Activity Log
-
-*   **Location:** The detailed log of the API calls made during the manual data load (or via API Testing tools) can be found in the **API Testing** section.
-*   **Content:** Shows each step (health check, ID list fetch, detail fetches), the outcome (success/failure), status codes, and data source information.
-*   **Persistence:** The log reflects the *most recent* data load attempt or testing sequence.
-
-### Data Source Indicator
-
-A badge in the header indicates the current data source status:
-
-*   **Not Connected:** Initial state before data loading is attempted.
-*   **Live API Data:** Successfully connected to and retrieved data from the Azure API.
-*   **Hybrid Data:** Connected, but using a mix of API and mock data (e.g., due to some endpoints failing).
-*   **Mock Data:** Using mock data because the API connection failed.
-
-## Debugging & Development Tools
-
-### API Testing Interface
-
-Click the **API Testing** link in the sidebar to access tools for interacting directly with the backend API (via the Node.js proxy) and viewing the activity log.
-
-### FHIR Mapping Status
-
-Click the **Mapping Status** link in the sidebar to view the progress of the FHIR mapping effort.
-
-*   **Purpose:** Provides visibility into the C# FHIR mappers located in the `FHIRMappers` directory.
-*   **Endpoint:** Fetches data from the `/mapping-status` endpoint on the Node.js server.
-*   **Display:**
-    *   Lists all identified mapper files (e.g., `PatientMapper.cs`).
-    *   Attempts to identify the target FHIR Resource based on the filename (e.g., `Patient`).
-    *   Groups mappers and displays them **sorted by the number of flags** (most flags first) to help prioritize work.
-    *   Lists all flags (`<<< FLAG: ... >>>`) found within each mapper file, along with the line number and content.
-*   **Flags:** These placeholders mark areas needing review, refinement, or further implementation in the mapping logic.
-
-### Diagnostic Endpoints
-
-The Node.js server provides several endpoints useful for direct testing (accessible via browser or tools like `curl`):
-
-*   `/health`: Basic server health check.
-*   `/test-api-connection`: Tests connection to the base `/Demographics` endpoint on the backend API.
-*   `/test-endpoint/{endpoint}/{optional-id}`: Tests an arbitrary endpoint on the backend API (e.g., `/test-endpoint/Demographics/1001`).
-*   `/test-patient-demographics/:id`: Tests the combined patient data retrieval logic for a specific ID.
-*   `/list-all-patients`: Triggers the scan for all patient IDs.
-*   `/mapping-status`: Returns the FHIR mapping status data as JSON.
-*   *(Other legacy test endpoints might exist but refer to the API Testing UI for primary debugging)*
-
-### Browser Console
-
-Open your browser's developer tools console for detailed logs, especially React rendering information and potential frontend errors.
-
-## Technical Details
-
-- Frontend: React (via CDN), Bootstrap 5
-- Backend: Node.js, Express.js
-- API Proxy: `http-proxy-middleware` used in `server.js`
-
-## API Integration & Data Handling
-
-(Content summarizing primary API endpoints and 204 handling - largely unchanged, can be reviewed if needed)
-
-## FHIR Mapping Layer
-
-(Content summarizing the C# mapping project - largely unchanged, refer to `mapping/README.md` for details)
+*   **Backend (`server.js`):** Legacy API URL and proxy settings are configured here.
+*   **Frontend (`fhir-mapper-ui/vite.config.js`):** Configures the proxy target (must match the backend server's address/port).
+*   **Frontend (`fhir-mapper-ui/src/context/AppContext.jsx`):** Manages global state and API interaction logic for the UI.
