@@ -1,6 +1,6 @@
 # Legacy EHR to FHIR Mapping Project (`azure-fhir`)
 
-This repository contains the components for a project focused on mapping data from a legacy EHR system to the FHIR R4 standard.
+This repository contains components for a project focused on mapping data from existing Amazing Charts legacy EHR system to the FHIR R4 standard.
 
 It includes:
 
@@ -103,21 +103,49 @@ To facilitate the development of the C# mappers, this repository includes a Node
 
 ### Running (Development)
 
-1.  **Start the Backend Server & Basic UI:**
+#### Option 1: Using the Start Script (Recommended)
+
+A convenience script `start.sh` is provided to launch both the backend and the React UI simultaneously.
+This script also attempts to automatically set the required Node.js version (currently v20.17.0) using `nvm` if it's installed in the standard location (`$HOME/.nvm`).
+
+1.  **Ensure the script is executable:**
+    ```bash
+    # Run this once from the azure-fhir root directory
+    chmod +x start.sh
+    ```
+2.  **Run the script:**
+    ```bash
+    # From the azure-fhir root directory
+    ./start.sh
+    ```
+    This will start both servers in the background.
+
+#### Option 2: Manual Startup
+
+1.  **Set Node.js Version:**
+    Ensure you are using the correct Node.js version (v20.17.0 or as required by `fhir-mapper-ui/package.json`). Use `nvm` or your preferred version manager:
+    ```bash
+    nvm use 20.17.0
+    ```
+2.  **Start the Backend Server & Basic UI:**
+    *(Requires Node.js v15+)*
     Open a terminal in the `azure-fhir` root directory:
     ```bash
     node server.js
     ```
     (Leave this running. Provides the backend proxy and serves the basic UI at http://localhost:3000).
 
-2.  **Start the React Development UI:**
+3.  **Start the React Development UI:**
+    *(Skip if using `start.sh`)*
+    *(Requires Node.js v20+)*
     Open *another* terminal in the `azure-fhir/fhir-mapper-ui` directory:
     ```bash
     npm run dev
     ```
     (Leave this running. Provides the React development UI, typically at http://localhost:5173).
 
-3.  **Access the UIs:**
+4.  **Access the UIs:**
+    *(URLs apply to both manual and script startup)*
     *   **Basic UI:** Open your web browser to the backend server's URL (e.g., `http://localhost:3000`).
     *   **React Dev UI:** Open your web browser to the Vite dev server's URL (e.g., `http://localhost:5173`).
 
