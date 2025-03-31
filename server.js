@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const axios = require('axios');
+const path = require('path');
+const fs = require('fs').promises; // Use promises for async file operations
+const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -675,6 +678,87 @@ app.get('/test-available-endpoints', async (req, res) => {
   }
 });
 
+// New Mapping Status Endpoint
+const mappersDir = path.join(__dirname, 'FHIRMappers');
+const flagRegex = /<<<\s*FLAG:(.*?)\s*>>>/g; // Regex to find flags
+
+app.get('/mapping-status', async (req, res) => {
+  console.log('[server.js] Received request for /mapping-status'); 
+  const mappingDetails = {};
+  let hasErrors = false;
+
+  try {
+    console.log(`[server.js] Attempting to read directory: ${mappersDir}`); 
+    if (!fs.existsSync(mappersDir)) {
+      console.warn(`[server.js] Warning: FHIRMappers directory not found at ${mappersDir}`); 
+      return res.status(404).json({ 
+        message: 'FHIRMappers directory not found',
+        error: `Directory not found: ${mappersDir}`,
+        mappingDetails: {} 
+      });
+    }
+
+    const files = await fs.readdir(mappersDir);
+    console.log(`[server.js] Found ${files.length} items in ${mappersDir}`); 
+
+    for (const file of files) {
+      const filePath = path.join(mappersDir, file);
+      const fileStats = await fs.stat(filePath);
+
+      if (fileStats.isFile() && path.extname(file).toLowerCase() === '.cs') {
+        const mapperName = path.basename(file, '.cs');
+        // Basic attempt to guess the resource from the name
+        const potentialResource = mapperName.endsWith('Mapper') ? mapperName.slice(0, -6) : mapperName;
+        const details = { 
+          mapperName: mapperName,
+          potentialResource: potentialResource,
+          flags: [],
+          error: null
+        };
+        
+        try {
+          console.log(`[server.js] Reading file: ${filePath}`); 
+          const content = await fs.readFile(filePath, 'utf8');
+          const lines = content.split(os.EOL); // Split by OS-specific newline
+          
+          const flagRegex = /<<<\s*FLAG:(.*?)(?:>>>|$)/gmi; // Global, multiline, case-insensitive
+          let match;
+          lines.forEach((line, index) => {
+            flagRegex.lastIndex = 0; // Reset regex index for each line
+            while ((match = flagRegex.exec(line)) !== null) {
+              details.flags.push({
+                line: index + 1,
+                flagContent: match[1].trim(),
+                fullLine: line.trim() // Store the whole line for context
+              });
+            }
+          });
+          console.log(`[server.js] Found ${details.flags.length} flags in ${file}`); 
+        } catch (fileReadError) {
+          console.error(`[server.js] Error reading file ${file}:`, fileReadError); 
+          details.error = `Error reading file: ${fileReadError.message}`;
+          hasErrors = true;
+        }
+        mappingDetails[file] = details; // Use filename as key
+      }
+    }
+    
+    console.log(`[server.js] Finished processing mappers. Sending response.`); 
+    res.status(hasErrors ? 207 : 200).json({ 
+      message: hasErrors ? 'Processed mappers with some errors' : 'Successfully processed mappers', 
+      mappingDetails: mappingDetails
+    });
+
+  } catch (err) {
+    console.error('[server.js] Critical error in /mapping-status:', err); 
+    res.status(500).json({
+      message: 'Failed to get mapping status due to server error',
+      error: err.message,
+      mappingDetails: {}
+    });
+  }
+});
+
 // Proxy middleware configuration with debug logging
 const apiProxy = createProxyMiddleware('/api', {
   target: 'https://apiserviceswin20250318.azurewebsites.net',
@@ -726,4 +810,5 @@ app.listen(PORT, () => {
   console.log('- /list-all-patients');
   console.log('- /test-patient-demographics/:id');
   console.log('- /test-available-endpoints');
+  console.log('- /mapping-status');
 });

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EHR System</title>
+    <title>FHIR Mapping Tool</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
@@ -234,11 +234,11 @@
         const AppProvider = ({ children }) => {
             const [patients, setPatients] = React.useState([]);
             const [selectedPatient, setSelectedPatient] = React.useState(null);
-            const [loading, setLoading] = React.useState(true);
+            const [loading, setLoading] = React.useState(false); // <<< CORRECTED: Start not loading
             const [error, setError] = React.useState(null);
             const [view, setView] = React.useState('dashboard'); // dashboard, patients, patient-detail, etc.
             const [activeModule, setActiveModule] = React.useState('summary'); // summary, allergies, medications, etc.
-            const [dataSource, setDataSource] = React.useState('loading'); // 'api' or 'mock'
+            const [dataSource, setDataSource] = React.useState('Not Connected'); // <<< CORRECTED: Start not connected
             const [apiActivityLog, setApiActivityLog] = React.useState([]); // <<< ADDED STATE
 
             // Helper function to add logs
@@ -582,28 +582,20 @@
 
         // Header Component
         const Header = () => {
-            const { view, setView, selectedPatient, dataSource } = useAppContext();
+            const { view, setView, dataSource, selectedPatient } = useAppContext();
             
             return (
-                <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
+                <nav className="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
                     <div className="container-fluid">
-                        <a className="navbar-brand" href="#" onClick={() => setView('dashboard')}>
-                            <i className="bi bi-heart-pulse me-2"></i>
-                            EHR System
-                        </a>
-                        {dataSource && (
-                            <div className="data-source-indicator me-3">
-                                <DataSourceBadge source={dataSource} />
-                            </div>
-                        )}
-                        <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                        <a className="navbar-brand" href="#" onClick={() => setView('dashboard')}> <i className="bi bi-diagram-3 me-1"></i> FHIR Mapping Tool</a>
+                        <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                             <span className="navbar-toggler-icon"></span>
                         </button>
                         <div className="collapse navbar-collapse" id="navbarNav">
                             <ul className="navbar-nav me-auto">
                                 <li className="nav-item">
                                     <a className={`nav-link ${view === 'dashboard' ? 'active' : ''}`} href="#" onClick={() => setView('dashboard')}>
-                                        <i className="bi bi-speedometer2 me-1"></i> Dashboard
+                                        <i className="bi bi-speedometer2 me-1"></i> Mapping Dashboard & Data Explorer
                                     </a>
                                 </li>
                                 <li className="nav-item">
@@ -619,6 +611,16 @@
                                         </a>
                                     </li>
                                 )}
+                                <li className="nav-item">
+                                    <a className={`nav-link ${view === 'apiTesting' ? 'active' : ''}`} href="#" onClick={() => setView('apiTesting')}>
+                                        <i className="bi bi-code-slash me-1"></i> Legacy API Testing
+                                    </a>
+                                </li>
+                                <li className="nav-item">
+                                    <a className={`nav-link ${view === 'mappingStatus' ? 'active' : ''}`} href="#" onClick={() => setView('mappingStatus')}>
+                                        <i className="bi bi-table me-1"></i> Mapping Status
+                                    </a>
+                                </li>
                             </ul>
                             <form className="d-flex">
                                 <input className="form-control me-2" type="search" placeholder="Search" />
@@ -632,57 +634,50 @@
 
         // Sidebar Component
         const Sidebar = () => {
-            const { view, activeModule, setActiveModule } = useAppContext();
+            const { view, activeModule, setActiveModule, selectedPatient } = useAppContext();
+            const [isExpanded, setIsExpanded] = React.useState(true);
             
-            if (view !== 'patient-detail') return null;
+            // Only show sidebar when viewing patient details
+            if (view !== 'patient-detail' || !selectedPatient) return null; 
             
+            const patientName = selectedPatient ? `${selectedPatient.First || ''} ${selectedPatient.Last || ''}`.trim() : 'Patient';
+
             return (
-                <div className="col-md-2 sidebar py-3">
-                    <div className="d-flex flex-column p-3">
-                        <h5>Patient Chart</h5>
-                        <div className="list-group mt-3">
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'summary' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('summary')}>
-                                <i className="bi bi-file-earmark-text me-2"></i> Summary
-                            </a>
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'demographics' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('demographics')}>
-                                <i className="bi bi-person-vcard me-2"></i> Demographics
-                            </a>
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'problems' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('problems')}>
-                                <i className="bi bi-exclamation-triangle me-2"></i> Problems
-                            </a>
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'medications' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('medications')}>
-                                <i className="bi bi-capsule me-2"></i> Medications
-                            </a>
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'allergies' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('allergies')}>
-                                <i className="bi bi-bandaid me-2"></i> Allergies
-                            </a>
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'labs' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('labs')}>
-                                <i className="bi bi-flask me-2"></i> Labs
-                            </a>
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'vitals' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('vitals')}>
-                                <i className="bi bi-activity me-2"></i> Vitals
-                            </a>
-                            <a href="#" 
-                               className={`list-group-item list-group-item-action ${activeModule === 'encounters' ? 'active' : ''}`}
-                               onClick={() => setActiveModule('encounters')}>
-                                <i className="bi bi-journal-medical me-2"></i> Encounters
-                            </a>
-                        </div>
+                <div className={`col-md-${isExpanded ? '2' : '1'} d-none d-md-block bg-light sidebar border-end`} style={{ transition: 'width 0.3s ease', paddingTop: '1rem' }}>
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                        {isExpanded && <h6 className="mb-0 text-muted text-truncate">Data for: {patientName}</h6>}
+                        <button className="btn btn-sm btn-outline-secondary" onClick={() => setIsExpanded(!isExpanded)} title={isExpanded ? "Collapse" : "Expand"}>
+                            <i className={`bi bi-chevron-${isExpanded ? 'left' : 'right'}`}></i>
+                        </button>
                     </div>
+                    <ul className="nav nav-pills flex-column mb-auto">
+                         <li className="nav-item">
+                            <a className={`nav-link ${activeModule === 'summary' ? 'active' : ''}`} href="#" onClick={() => setActiveModule('summary')}>
+                                <i className="bi bi-clipboard-data me-1"></i> {isExpanded && 'Summary'}
+                            </a>
+                        </li>
+                         <li className="nav-item">
+                            <a className={`nav-link ${activeModule === 'demographics' ? 'active' : ''}`} href="#" onClick={() => setActiveModule('demographics')}>
+                                <i className="bi bi-person-vcard me-1"></i> {isExpanded && 'Demographics'}
+                            </a>
+                        </li>
+                        <li className="nav-item">
+                            <a className={`nav-link ${activeModule === 'problems' ? 'active' : ''}`} href="#" onClick={() => setActiveModule('problems')}>
+                                <i className="bi bi-journal-medical me-1"></i> {isExpanded && 'Problems'}
+                            </a>
+                        </li>
+                        <li className="nav-item">
+                            <a className={`nav-link ${activeModule === 'medications' ? 'active' : ''}`} href="#" onClick={() => setActiveModule('medications')}>
+                                <i className="bi bi-prescription2 me-1"></i> {isExpanded && 'Medications'}
+                            </a>
+                        </li>
+                        <li className="nav-item">
+                            <a className={`nav-link ${activeModule === 'allergies' ? 'active' : ''}`} href="#" onClick={() => setActiveModule('allergies')}>
+                                <i className="bi bi-shield-exclamation me-1"></i> {isExpanded && 'Allergies'}
+                            </a>
+                        </li>  {/* <-- Added missing closing tag */}
+                         {/* Add other patient detail sections here */}
+                     </ul>
                 </div>
             );
         };
@@ -725,27 +720,36 @@
 
         // Dashboard Component
         const Dashboard = () => {
-            const { patients, setView, loading, error, dataSource } = useAppContext();
-            
-            if (loading) return <LoadingWithLog />;
-            
+            const { patients, setView, loading, error, dataSource, fetchPatients } = useAppContext();
+
             return (
                 <div className="p-4">
                     <div className="d-flex justify-content-between align-items-center mb-4">
-                        <h2>Dashboard</h2>
-                        <div className="d-flex">
+                        <h2>Mapping Dashboard & Data Explorer</h2>
+                        <div className="d-flex align-items-center">
+                            {/* Error Message - always potentially visible */}                        
                             {error && (
-                                <div className="alert alert-warning me-3 mb-0 py-2">
+                                <div className="alert alert-danger p-2 me-2 mb-0" role="alert">
                                     <i className="bi bi-exclamation-triangle me-1"></i>
                                     {error}
                                 </div>
                             )}
-                            <button className="btn btn-primary" onClick={() => setView('patients')}>
-                                <i className="bi bi-people me-1"></i> View All Patients
-                            </button>
-                        </div>
+                            {/* Loading State OR Button - mutually exclusive */}                        
+                            {loading ? (
+                                <div className="d-flex align-items-center"> {/* Wrap spinner and text */} 
+                                    <div className="spinner-border spinner-border-sm text-primary" role="status">
+                                        <span className="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span className="ms-2">Loading API Data...</span>
+                                </div>
+                            ) : (
+                                 <button className="btn btn-primary" onClick={() => { console.log('Dashboard button clicked, initiating fetchPatients...'); fetchPatients(); }} disabled={loading}>
+                                     <i className="bi bi-cloud-download me-1"></i> Load Legacy API Data
+                                 </button>
+                            )}
+                        </div> {/* End d-flex align-items-center */}
                     </div>
-                    
+
                     <div className="row g-4 mb-4">
                         <div className="col-md-3">
                             <div className="card dashboard-card bg-primary text-white">
@@ -1542,12 +1546,7 @@
                 try {
                     // First check if the response is valid
                     if (!response.ok) {
-                        return {
-                            error: true,
-                            status: response.status,
-                            statusText: response.statusText,
-                            message: `Server returned ${response.status}: ${response.statusText}`
-                        };
+                        throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     
                     // Try to parse as JSON
@@ -1672,7 +1671,7 @@
             
             return (
                 <div className="p-4" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)' /* Adjust based on header height */ }}>
-                    <h2 className="mb-4">API Testing Tools</h2>
+                    <h2 className="mb-4">Legacy API Testing</h2>
                     
                     <div className="row mb-4">
                         <div className="col">
@@ -1816,6 +1815,120 @@
             );
         };
 
+        // Mapping Status Component
+        const MappingStatusView = () => {
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState(null);
+            const [mappedResources, setMappedResources] = React.useState([]);
+            const [flags, setFlags] = React.useState([]);
+
+            React.useEffect(() => {
+                setLoading(true);
+                setError(null);
+                fetch('/mapping-status') // Fetch from the new backend endpoint
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log("Mapping status data:", data);
+                        // Store the raw details object
+                        setMappingDetails(data.mappingDetails || {}); 
+                        setLoading(false);
+                    })
+                    .catch(err => {
+                        console.error('Raw error object fetching mapping status:', err); // Log raw error
+                        // Attempt to get more details if it's a fetch response error
+                        if (err instanceof Response) { 
+                            err.text().then(text => {
+                                console.error(`Mapping status fetch failed with status: ${err.status}, Body: ${text}`);
+                                setError(`Failed to load mapping status. Server responded with ${err.status}. Check console for details.`);
+                            }).catch(parseErr => {
+                                console.error('Could not parse error response body:', parseErr);
+                                setError(`Failed to load mapping status. Server responded with ${err.status}, but couldn't read response body.`);
+                            });
+                        } else {
+                            // Generic error
+                            setError(`Failed to load mapping status: ${err.message}. Check console for details.`);
+                        }
+                        setLoading(false);
+                    });
+            }, []); // Empty dependency array ensures this runs only once on mount
+
+            if (loading) {
+                return <div className="text-center"><div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div><p>Loading Mapping Status...</p></div>;
+            }
+
+            if (error) {
+                return <div className="alert alert-danger">{error}</div>;
+            }
+
+            // Process mappingDetails: Convert object to array and sort by flag count descending
+            const sortedMappers = Object.entries(mappingDetails)
+                .map(([file, details]) => ({ ...details, file })) // Add filename back into the object
+                .sort((a, b) => (b.flags?.length || 0) - (a.flags?.length || 0)); // Sort by flag count
+
+            return (
+                <div className="container-fluid mt-3">
+                    <h2>FHIR Mapping Status</h2>
+                    <p className="text-muted">Tracking progress of C# mappers in <code>FHIRMappers/</code>. Sorted by flag count (most flags first).</p>
+                    <hr />
+
+                     {sortedMappers.length === 0 && (
+                        <p>No mapper files found in the <code>FHIRMappers</code> directory or the directory doesn't exist.</p>
+                     )}
+
+                    {sortedMappers.map((mapper, index) => (
+                         <div key={mapper.file || index} className="card mb-3">
+                             <div className="card-header d-flex justify-content-between align-items-center" style={{ backgroundColor: '#e9ecef'}}> {/* Lighter header */}
+                                 <h5 className="mb-0">
+                                     <i className="bi bi-filetype-cs me-2"></i>
+                                     <code>{mapper.mapperName}.cs</code> 
+                                     {mapper.potentialResource && <span className="badge bg-info ms-2">{mapper.potentialResource} Resource</span>}
+                                 </h5>
+                                 <span className={`badge rounded-pill ${mapper.flags?.length > 0 ? 'bg-warning text-dark' : 'bg-success'}`}>
+                                     {mapper.flags?.length || 0} Flags
+                                 </span>
+                             </div>
+                             <div className="card-body">
+                                 {mapper.error && (
+                                     <div className="alert alert-danger">Error reading file: {mapper.error}</div>
+                                 )}
+                                 {!mapper.error && (!mapper.flags || mapper.flags.length === 0) && (
+                                    <p className="text-success mb-0"><i class="bi bi-check-circle-fill me-1"></i> No flags found in this mapper.</p>
+                                 )}
+                                 {!mapper.error && mapper.flags && mapper.flags.length > 0 && (
+                                     <div className="table-responsive" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
+                                         <table className="table table-striped table-bordered table-sm">
+                                             <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                                                 <tr>
+                                                    <th style={{width: '10%'}}>Line</th>
+                                                    <th>Flag Content & Context</th>
+                                                 </tr>
+                                             </thead>
+                                             <tbody>
+                                                 {mapper.flags.map((flag, flagIndex) => (
+                                                     <tr key={flagIndex}>
+                                                         <td>{flag.line > 0 ? flag.line : 'N/A'}</td>
+                                                         <td>
+                                                            <strong className="text-danger">{flag.flagContent}</strong>
+                                                            {flag.line > 0 && <small className="d-block text-muted mt-1"><em>{flag.fullLine}</em></small>}
+                                                         </td>
+                                                     </tr>
+                                                 ))}
+                                             </tbody>
+                                         </table>
+                                     </div>
+                                 )}
+                             </div>
+                         </div>
+                     ))}
+                 </div>
+            );
+        };
+
         // App Component
         const App = () => {
             const { view, activeModule, loading } = useAppContext();
@@ -1854,8 +1967,11 @@
                             currentView = <PatientSummary />;
                     }
                     break;
-                case 'api-testing':
+                case 'apiTesting':
                     currentView = <ApiTestingTools />;
+                    break;
+                case 'mappingStatus':
+                    currentView = <MappingStatusView />;
                     break;
                 default:
                     currentView = <Dashboard />;
